@@ -13,18 +13,18 @@ Each noodle is a chain of particles joined by capsules, simulated in small fixed
 ### Usage
 
 ```js
-import { LineCurve3, Sphere, Timer, Vector3 } from 'three/webgpu'
+import * as THREE from 'three/webgpu'
 import { NoodleSimulation } from 'three-advanced-techniques'
 
 // one curve per noodle: its rest shape and starting pose
-const curves = points.map((p) => new LineCurve3(p, p.clone().add(new Vector3(0, -3, 0))))
+const curves = points.map((p) => new THREE.LineCurve3(p, p.clone().add(new THREE.Vector3(0, -3, 0))))
 const noodles = new NoodleSimulation(curves, material, { radius: 0.05, particlesPerNoodle: 32 })
 noodles.bendingCompliance = 0.5 // stiffer
 noodles.bendingPlasticity = 0 // ropes and cables spring back
-noodles.colliders.push(new Sphere(center, 0.5))
+noodles.colliders.push(new THREE.Sphere(center, 0.5))
 scene.add(noodles)
 
-const timer = new Timer()
+const timer = new THREE.Timer()
 renderer.setAnimationLoop((time) => {
   timer.update(time)
   noodles.update(renderer, timer.getDelta())
@@ -53,7 +53,7 @@ Worms are noodles that move themselves: they only add pushes and muscle bends, s
 ### Usage
 
 ```js
-import { Timer } from 'three/webgpu'
+import * as THREE from 'three/webgpu'
 import { WormSimulation } from 'three-advanced-techniques'
 import { BodyField } from './BodyField.js' // copied from the repo's examples/utils, not in the package
 
@@ -62,7 +62,7 @@ const worms = new WormSimulation(curves, material, { field, radius: 0.024, parti
 worms.colliders.push(...field.colliders)
 scene.add(worms)
 
-const timer = new Timer()
+const timer = new THREE.Timer()
 renderer.setAnimationLoop((time) => {
   timer.update(time)
   const dt = timer.getDelta()

@@ -9,7 +9,7 @@ Cheap Screen-space Reflections found by Newton's method on the depth buffer inst
 ## Usage
 
 ```js
-import { HalfFloatType, RenderPipeline, RGFormat } from 'three/webgpu'
+import * as THREE from 'three/webgpu'
 import { mrt, output, pass, rtt, velocity } from 'three/tsl'
 import { traa } from 'three/addons/tsl/display/TRAANode.js'
 import { ssr, ssrComposite, ssrGBuffer } from 'three-advanced-techniques'
@@ -17,8 +17,8 @@ import { ssr, ssrComposite, ssrGBuffer } from 'three-advanced-techniques'
 const scenePass = pass(scene, camera, { samples: 0 })
 scenePass.setMRT(mrt({ output, velocity, ...ssrGBuffer() }))
 const velocityTexture = scenePass.getTexture('velocity')
-velocityTexture.type = HalfFloatType // RG16F
-velocityTexture.format = RGFormat
+velocityTexture.type = THREE.HalfFloatType // RG16F
+velocityTexture.format = THREE.RGFormat
 
 const color = scenePass.getTextureNode()
 const reflections = ssr(color, scenePass, { roughnessCutoff: 0.6, thickness: 0.2 })
@@ -27,9 +27,9 @@ const composite = ssrComposite(color, reflections, scene.environment, {
   environmentRotation: scene.environmentRotation,
 })
 
-const renderPipeline = new RenderPipeline(renderer)
+const renderPipeline = new THREE.RenderPipeline(renderer)
 renderPipeline.outputNode = traa(
-  rtt(composite, null, null, { type: HalfFloatType }),
+  rtt(composite, null, null, { type: THREE.HalfFloatType }),
   scenePass.getTextureNode('depth'),
   scenePass.getTextureNode('velocity'),
   camera,

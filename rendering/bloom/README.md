@@ -9,7 +9,7 @@ The classic mip-chain bloom of the Unreal Bloom, in 8 passes instead of 12, with
 ## Usage
 
 ```js
-import { RenderPipeline } from 'three/webgpu'
+import * as THREE from 'three/webgpu'
 import { pass } from 'three/tsl'
 import { bloom } from 'three-advanced-techniques'
 
@@ -18,7 +18,7 @@ const sceneColor = scenePass.getTextureNode() // the input must be a texture nod
 
 const bloomNode = bloom(sceneColor, { strength: 1, radius: 0.5, threshold: 0.8 })
 
-const renderPipeline = new RenderPipeline(renderer)
+const renderPipeline = new THREE.RenderPipeline(renderer)
 renderPipeline.outputNode = sceneColor.add(bloomNode)
 ```
 

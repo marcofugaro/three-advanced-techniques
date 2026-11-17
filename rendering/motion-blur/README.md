@@ -9,22 +9,22 @@ Object and camera motion blur as a tile-based reconstruction filter, after McGui
 ## Usage
 
 ```js
-import { HalfFloatType, RenderPipeline, RGFormat } from 'three/webgpu'
+import * as THREE from 'three/webgpu'
 import { mrt, output, pass, velocity } from 'three/tsl'
 import { motionBlur } from 'three-advanced-techniques'
 
 const scenePass = pass(scene, camera)
 scenePass.setMRT(mrt({ output, velocity }))
 const velocityTexture = scenePass.getTexture('velocity')
-velocityTexture.type = HalfFloatType // RG16F
-velocityTexture.format = RGFormat
+velocityTexture.type = THREE.HalfFloatType // RG16F
+velocityTexture.format = THREE.RGFormat
 
 const blurred = motionBlur(scenePass.getTextureNode('output'), scenePass.getTextureNode('depth'), camera, {
   velocityNode: scenePass.getTextureNode('velocity'), // omit for camera motion only, without the MRT
   shutterAngle: 180,
 })
 
-const renderPipeline = new RenderPipeline(renderer)
+const renderPipeline = new THREE.RenderPipeline(renderer)
 renderPipeline.outputNode = blurred
 ```
 

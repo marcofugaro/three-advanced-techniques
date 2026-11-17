@@ -13,7 +13,7 @@ npm install three three-advanced-techniques
 ```
 
 ```js
-import { RenderPipeline } from 'three/webgpu'
+import * as THREE from 'three/webgpu'
 import { mrt, output, pass, renderOutput, velocity } from 'three/tsl'
 import { taau } from 'three-advanced-techniques'
 
@@ -25,7 +25,7 @@ const taauNode = taau(scenePass.getTextureNode('output'), depth, scenePass.getTe
   maxAccumulation: 24, // samples a pixel accumulates, 16 by default
 })
 
-const renderPipeline = new RenderPipeline(renderer)
+const renderPipeline = new THREE.RenderPipeline(renderer)
 renderPipeline.outputColorTransform = false
 renderPipeline.outputNode = renderOutput(taauNode.getTextureNode())
 ```

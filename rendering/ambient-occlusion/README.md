@@ -11,7 +11,7 @@ A fast version of GTAO. XeGTAO's ground-truth ambient occlusion, at half resolut
 The occlusion runs on an opaque prepass's depth, and the scene's materials take it as their ambient occlusion: it darkens the ambient light only, not the direct light.
 
 ```js
-import { RenderPipeline } from 'three/webgpu'
+import * as THREE from 'three/webgpu'
 import { builtinAOContext, context, pass } from 'three/tsl'
 import { xeGTAO } from 'three-advanced-techniques'
 
@@ -24,7 +24,7 @@ const occlusion = xeGTAO(prePass.getTextureNode('depth'), camera, { radius: 0.5 
 const scenePass = pass(scene, camera)
 scenePass.contextNode = builtinAOContext(occlusion.getMaterialAONode())
 
-const renderPipeline = new RenderPipeline(renderer)
+const renderPipeline = new THREE.RenderPipeline(renderer)
 renderPipeline.outputNode = scenePass
 ```
 
