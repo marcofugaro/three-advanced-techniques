@@ -14,22 +14,7 @@ You can import each technique or node like this:
 import { xeGTAO } from 'three-advanced-techniques'
 ```
 
-And then use it like this:
-
-```js
-import * as THREE from 'three/webgpu'
-import { pass, vec4 } from 'three/tsl'
-import { xeGTAO } from 'three-advanced-techniques'
-
-const scenePass = pass(scene, camera)
-const sceneColor = scenePass.getTextureNode()
-const occlusion = xeGTAO(scenePass.getTextureNode('depth'), camera, { radius: 0.5 }) // world units
-
-const renderPipeline = new THREE.RenderPipeline(renderer)
-renderPipeline.outputNode = vec4(sceneColor.rgb.mul(occlusion.getAONode()), sceneColor.a)
-```
-
-Each technique's README below has its own usage.
+And then use it with three.js' [WebGPURenderer](https://threejs.org/docs/#WebGPURenderer). Each technique's README linked below has its own usage.
 
 ## Rendering
 
