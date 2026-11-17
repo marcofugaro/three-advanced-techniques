@@ -41,7 +41,7 @@ Ambient occlusion reads the depth buffer many times per pixel, and cleaning up i
 
 ## What it improves
 
-- **A moving tile.** The 4×4 tile moves every frame, so the taps land at new distances, and the history averages them.
-- **Moved occluders.** Where an occluder moves in or out of the kernel's footprint, the history shortens, with or without motion vectors.
-- **Scale-free tolerances.** Every depth test is a share of the view distance.
-- **Ambient light only.** `getMaterialAONode()` runs the upsample in each material's own fragment, so the occlusion scales the ambient light and leaves the direct light alone.
+- **Smooth, not grainy.** The sampling pattern shifts every frame and the frames blend together, so the shading comes out smooth.
+- **Shadows follow what moves.** When an object moves, its darkening moves with it instead of smearing behind it.
+- **Clean outlines, near or far.** The darkening stops at an object's outline, close up or far away, instead of spilling into a dark halo around it.
+- **Lit areas stay bright.** It dims only the soft ambient light, not direct light, so a crease in the sun doesn't turn grey.

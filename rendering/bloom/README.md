@@ -33,4 +33,4 @@ Bloom's cost is memory traffic: every pass writes a texture and the next one rea
 
 ## What it improves
 
-Each mip's Gaussian footprint, the composite and the threshold-then-blur order match the classic bloom. Tint the mips with `bloomTintColors`, or swap the threshold with `highPassFn`.
+It looks the same as the classic bloom, the tight glow around bright spots and the wide, soft haze around it, only faster. Tint the glow with `bloomTintColors`, or choose what glows with `highPassFn`.

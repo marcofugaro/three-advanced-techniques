@@ -47,8 +47,7 @@ The usual ray march steps along each reflected ray, reading the depth buffer eve
 
 ## What it improves
 
-- **Weighted by Fresnel.** Every physical material reflects by the environment BRDF it lights itself with, and the reflection replaces its environment specular rather than adding to it.
-- **Glossy by roughness.** Each pixel reads a prefiltered colour pyramid at the width of its roughness cone where the ray lands.
-- **A 1-px hit test.** Each Newton hit is checked by the paper's 1-px test against the surface, plus a slope-scaled depth guard.
-- **Deterministic without jitter.** With `jitter` off, the probes take a fixed offset per pixel, and a still camera gives bit-identical frames.
-- **Misses fall back to the environment.** Rays that leave the screen fade into the scene's environment.
+- **Sharp on smooth surfaces, blurry on rough ones.** A polished floor shows a crisp mirror image, a rougher one a soft, spread-out reflection.
+- **Strongest at grazing angles.** Surfaces reflect more as you look across them and less as you look straight down, like real materials, and replace the environment's reflection instead of adding to it, so they don't get too bright.
+- **No ghost reflections.** Each hit is checked against the surface it lands on, so nothing shows up in a reflection where it isn't.
+- **No hard edges.** Reflections of what's off screen fade smoothly into the environment instead of cutting off.

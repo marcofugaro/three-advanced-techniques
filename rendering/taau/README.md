@@ -43,8 +43,9 @@ Upscaling is limited by memory traffic: every pass reads its inputs and the prev
 
 ## What it improves
 
-- **Thin features lock.** Features under two texels wide (FSR2's shape test) keep their history unclipped; the lock decays, and lets go when the neighbourhood's luma changes.
-- **Edges keep their history.** A silhouette edge keeps the history the depth test rejects, refreshed where it moves over what it uncovers.
-- **Scale-free rejection.** A depth change past a share of the view depth drops the history.
-- **Catmull-Rom history.** It's read with a 5-tap Catmull-Rom filter and clipped to the neighbourhood's YCoCg box as well as its RGB one, keeping at most what either would.
-- **A kernel in output pixels.** The reconstruction kernel's width is set in output pixels, at any upscale ratio.
+It reduces ghosting and blur:
+
+- **Sharp, not soft.** Past frames are resampled with a sharp filter, so detail doesn't soften frame after frame.
+- **No ghost trails.** Past frames only keep colours the current frame has nearby, and are dropped where depth jumps, so moving objects don't leave trails behind.
+- **Thin details hold still.** Wires, railings and other lines under two pixels wide stay steady instead of flickering or breaking up.
+- **Smooth edges in motion.** An object's outline stays anti-aliased as it moves, instead of turning jagged over the background it uncovers.

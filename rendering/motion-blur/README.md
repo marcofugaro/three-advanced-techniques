@@ -40,8 +40,9 @@ A simple motion blur takes 16 samples along every pixel's motion, even where not
 
 ## What it improves
 
-- **Streaks past the outline.** Each pixel gathers along its neighbourhood's largest velocity, so a moving object's streak reaches past its silhouette.
-- **Depth-aware taps.** Taps are weighted by depth, and the background uncovered behind a streak is filled from the pixel's own blurred background.
-- **Mirrored, jittered taps.** Taps come in mirrored pairs on a jittered lattice instead of evenly spaced copies.
-- **Exposure from a shutter angle.** The streak covers `shutterAngle` / 360 of a smoothed frame time, capped by `maxBlurRadius`, so a hitch frame keeps a normal-length streak. A camera turn past `cutRotation` drops the camera blur for that frame, and a gap past `maxFrameGap` drops all of it.
-- **The sky blurs.** Background pixels blur with the camera's rotation.
+It reduces glitches and visual errors:
+
+- **Streaks past the outline.** Each pixel blurs along its neighbourhood's largest motion, so a moving object's streak reaches past its silhouette.
+- **No bleeding between depths.** Taps are weighted by depth, so near and far objects don't smear into each other.
+- **No stepped copies.** Taps are jittered, so a streak reads as a smooth blur, not repeated copies of the object.
+- **Steady through hitches.** Streak length follows a smoothed frame time, so a slow frame doesn't flash a long streak.
