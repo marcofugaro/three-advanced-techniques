@@ -7,7 +7,6 @@
 //   const color = scenePass.getTextureNode('output')
 //   const depth = scenePass.getTextureNode('depth')
 //   const taauNode = taau(color, depth, scenePass.getTextureNode('velocity'), camera, { maxAccumulation: 24 })
-//   taauNode.maxAccumulation = 8 // every option is also a property
 //   renderPipeline.outputNode = renderOutput(taauNode.getTextureNode())
 //   await taauNode.compileAsync(renderer) // optional: compiles the passes ahead of the first frame
 

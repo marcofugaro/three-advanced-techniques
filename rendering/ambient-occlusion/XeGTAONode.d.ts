@@ -4,7 +4,6 @@
 //   prePass.contextNode = context({ getAO: null }) // the prepass mustn't read the AO it feeds
 //   const occlusion = xeGTAO(prePass.getTextureNode('depth'), camera, { radius: 0.5 }) // world units
 //   scenePass.contextNode = builtinAOContext(occlusion.getMaterialAONode())
-//   occlusion.radius = 0.3 // every option is also a property
 //   await occlusion.compileAsync(renderer) // optional: compiles its passes ahead of the first frame
 //
 // Or as a post effect: multiply the scene's color by `occlusion.getAONode()`.

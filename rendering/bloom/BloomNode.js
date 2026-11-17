@@ -17,7 +17,6 @@
 //   const sceneColor = scenePass.getTextureNode()
 //   const bloomNode = bloom(sceneColor, { strength: 1, radius: 0.5, threshold: 0.8 })
 //   renderPipeline.outputNode = sceneColor.add(bloomNode)
-//   bloomNode.strength = 0.5 // every option is also a property
 //   await bloomNode.compileAsync(renderer) // optional: compiles the passes ahead of the first frame
 
 import {

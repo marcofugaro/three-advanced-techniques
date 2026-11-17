@@ -2,7 +2,9 @@
 
 Temporal anti-aliasing upscaling: the scene renders jittered, at or below the output's resolution, and each frame joins the history into one stable, anti-aliased image at the output's. Thin features stay locked, edges stay smooth. After Karis, [_High Quality Temporal Supersampling_](https://advances.realtimerendering.com/s2014/) (2014), and AMD's [FidelityFX Super Resolution 2](https://github.com/GPUOpen-Effects/FidelityFX-FSR2) (2022).
 
-[![TAAU demo](index.webp)](https://marcofugaro.github.io/three-advanced-techniques/rendering/taau/)
+<a href="https://marcofugaro.github.io/three-advanced-techniques/rendering/taau/"><img src="index.webp" alt="TAAU demo" width="400"></a>
+
+[Live](https://marcofugaro.github.io/three-advanced-techniques/rendering/taau/)
 
 ## Use
 
@@ -22,14 +24,13 @@ const depth = scenePass.getTextureNode('depth')
 const taauNode = taau(scenePass.getTextureNode('output'), depth, scenePass.getTextureNode('velocity'), camera, {
   maxAccumulation: 24, // samples a pixel accumulates, 16 by default
 })
-taauNode.maxAccumulation = 8 // every option is also a property
 
 const renderPipeline = new RenderPipeline(renderer)
 renderPipeline.outputColorTransform = false
 renderPipeline.outputNode = renderOutput(taauNode.getTextureNode())
 ```
 
-The numeric options are uniforms, changed live; `bicubicHistory`, `reactiveNode` and `stableOutput` rebuild the node's passes on the next frame. The camera is jittered only while the pipeline renders, so picking and the shadow maps see it still. Read the output through `getTextureNode()`: it ping-pongs. If TAAU can leave the output graph, call `syncUnjitteredProjection(camera)` once a frame before rendering: the scene's velocity keeps reading the projection TAAU handed it.
+The camera is jittered only while the pipeline renders, so picking and the shadow maps see it still. Read the output through `getTextureNode()`: it ping-pongs. If TAAU can leave the output graph, call `syncUnjitteredProjection(camera)` once a frame before rendering: the scene's velocity keeps reading the projection TAAU handed it.
 
 ## Why it's fast
 

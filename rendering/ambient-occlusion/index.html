@@ -148,9 +148,9 @@
       const BOARD = SIDE * PITCH
       const DEPTH = 0.8 // of the board, down to the floor
 
-      // Back far enough to see the board's width: a portrait phone sees it whole too.
+      // Close in on the pins; a narrow screen backs off to keep the same width in view.
       const halfWidth = Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect)
-      const distance = THREE.MathUtils.clamp((BOARD / 2 + 1.1) / Math.tan(halfWidth), 8.4, 24)
+      const distance = THREE.MathUtils.clamp(2.25 / Math.tan(halfWidth), 4, 24)
       camera.position.set(3.4, 6, 6.85).setLength(distance).add(controls.target)
       scene.fog.near = distance + 4
       scene.fog.far = distance + 22

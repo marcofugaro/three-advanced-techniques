@@ -24,7 +24,6 @@
  * As a post effect:
  *
  *   const aoPass = xeGTAO(scenePass.getTextureNode('depth'), camera, { radius: 0.3 }) // world units
- *   aoPass.radius = 0.5 // every option is also a property
  *   renderPipeline.outputNode = vec4(scenePassColor.rgb.mul(aoPass.getAONode()), scenePassColor.a)
  *   await aoPass.compileAsync(renderer) // optional: compiles its passes ahead of the first frame
  *

@@ -16,8 +16,10 @@
  *   scenePass.getTexture('velocity').type = THREE.HalfFloatType      // RG16F: keeps the MRT at 30 B per sample
  *   scenePass.getTexture('velocity').format = THREE.RGFormat
  *   const color = scenePass.getTextureNode()
- *   const reflections = ssr(color, scenePass, { thickness: 0.2 })    // reads the pass's ssr* and velocity textures
- *   reflections.roughnessCutoff = 0.6                                // every option is also a property
+ *   const reflections = ssr(color, scenePass, {                      // reads the pass's ssr* and velocity textures
+ *     thickness: 0.2,
+ *     roughnessCutoff: 0.6,
+ *   })
  *   const composite = ssrComposite(color, reflections, scene.environment, {
  *     environmentIntensity: () => scene.environmentIntensity,          // read each frame
  *     environmentRotation: scene.environmentRotation,
@@ -34,12 +36,11 @@
  * Outputs: the node itself is `(L_ssr, c)` at the fragment's G-buffer texel; `ssrComposite()` replaces the
  * scene's environment specular by `mix(L_env, L_ssr, c)`; `ssrEnvironmentSpecular()` is that `F·L_env`.
  *
- * Every option is also a property of the same name. Numeric settings are uniforms (getter → UniformNode, setter →
- * value) and switches uniform 0/1: changing them never recompiles. `batch` and `velocityNode` rebuild the trace on
- * the next frame, as do `normalsNode`, `linearDepthNode`, `specularNode` and `resolutionScale`. Those four and
- * `pyramidLevels` also change what the node's inline readers compile to (the node, `resolve()`, `ssrComposite()`,
- * `ssrEnvironmentSpecular()`): rebuild the output graph after changing them. `getTextureNode()` follows on its own.
- * The camera type is fixed at construction.
+ * Numeric settings are uniforms (getter → UniformNode, setter → value) and switches uniform 0/1: changing them never
+ * recompiles. `batch` and `velocityNode` rebuild the trace on the next frame, as do `normalsNode`, `linearDepthNode`,
+ * `specularNode` and `resolutionScale`. Those four and `pyramidLevels` also change what the node's inline readers
+ * compile to (the node, `resolve()`, `ssrComposite()`, `ssrEnvironmentSpecular()`): rebuild the output graph after
+ * changing them. `getTextureNode()` follows on its own. The camera type is fixed at construction.
  */
 import {
   FloatType,
@@ -443,8 +444,8 @@ export class SSRNode extends Node {
   /**
    * @param {TextureNode} colorNode - Scene radiance at the G-buffer's resolution (HDR: the jittered scene pass output).
    * @param {PassNode} gBufferPass - The pass whose MRT spreads ssrGBuffer() (and 'velocity'); samples 0.
-   * @param {object} [options] - Initial values of the properties of the same name: `label`, the input nodes,
-   *   `resolutionScale`, `batch`, `pyramidLevels`, `maxDistance`, the numeric settings and the switches.
+   * @param {object} [options] - `label`, the input nodes, `resolutionScale`, `batch`, `pyramidLevels`, `maxDistance`,
+   *   the numeric settings and the switches.
    */
   constructor(colorNode, gBufferPass, options = {}) {
     super('vec4')

@@ -3,8 +3,7 @@
 //   const scenePass = pass(scene, camera, { samples: 0 })
 //   scenePass.setMRT(mrt({ output, velocity, ...ssrGBuffer() }))   // keep velocity RG16F
 //   const color = scenePass.getTextureNode()
-//   const reflections = ssr(color, scenePass, { roughnessCutoff: 0.6 })
-//   reflections.thickness = 0.2 // every option is also a property
+//   const reflections = ssr(color, scenePass, { roughnessCutoff: 0.6, thickness: 0.2 })
 //   renderPipeline.outputNode = ssrComposite(color, reflections, scene.environment)
 //   await reflections.compileAsync(renderer) // optional: the passes' pipelines, ahead of time
 
@@ -20,7 +19,6 @@ export type SSRGBuffer = {
   ssrSpecular: Node<'vec4'>
 }
 
-/** Each option is also a property of the node, of the same name. */
 export interface SSRNodeOptions {
   /** Prefix of every material, target and quad name. Default 'SSR'. */
   label?: string

@@ -2,7 +2,9 @@
 
 Cheap Screen-space Reflections found by Newton's method on the depth buffer instead of a ray march, after Mayer, Assarsson and Sintorn, [_Ultrafast Screen-Space Refractions and Caustics via Newton's Method_](https://jcgt.org/published/0015/01/03/paper.pdf) (2026).
 
-[![Screen-space reflections demo](index.webp)](https://marcofugaro.github.io/three-advanced-techniques/rendering/screen-space-reflections/)
+<a href="https://marcofugaro.github.io/three-advanced-techniques/rendering/screen-space-reflections/"><img src="index.webp" alt="Screen-space reflections demo" width="400"></a>
+
+[Live](https://marcofugaro.github.io/three-advanced-techniques/rendering/screen-space-reflections/)
 
 ## Usage
 
@@ -19,8 +21,7 @@ velocityTexture.type = HalfFloatType // RG16F
 velocityTexture.format = RGFormat
 
 const color = scenePass.getTextureNode()
-const reflections = ssr(color, scenePass, { roughnessCutoff: 0.6 })
-reflections.thickness = 0.2 // every option is also a property
+const reflections = ssr(color, scenePass, { roughnessCutoff: 0.6, thickness: 0.2 })
 const composite = ssrComposite(color, reflections, scene.environment, {
   environmentIntensity: () => scene.environmentIntensity,
   environmentRotation: scene.environmentRotation,

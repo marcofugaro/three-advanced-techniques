@@ -6,7 +6,9 @@ Compute shader strand simulation in TSL. `NoodleSimulation` simulates noodles, r
 
 Each noodle is a chain of particles joined by capsules, simulated in small fixed time steps so it moves the same at any frame rate. After Macklin et al., [_XPBD: Position-Based Simulation of Compliant Constrained Dynamics_](https://matthias-research.github.io/pages/publications/XPBD.pdf) (2016), Han and Harada, [_Tridiagonal Matrix Formulation for Inextensible Hair Strand Simulation_](https://doi.org/10.2312/PE.vriphys.vriphys13.011-016) (2013), Bergou et al., [_Discrete Elastic Rods_](https://www.cs.columbia.edu/cg/rods/) (2008), Ericson, [_Real-Time Collision Detection_](https://realtimecollisiondetection.net/books/rtcd/) (2005), Tonge et al., [_Mass Splitting for Jitter-Free Parallel Rigid Body Simulation_](https://doi.org/10.1145/2185520.2185601) (2012), Wu et al., [_A Safe and Fast Repulsion Method for GPU-based Cloth Self Collisions_](https://wanghmin.github.io/publication/wu-2020-sfr) (2020), and Chen et al., [_Offset Geometric Contact_](https://graphics.cs.utah.edu/research/projects/ogc/) (2025).
 
-[![Noodles demo](index.webp)](https://marcofugaro.github.io/three-advanced-techniques/simulations/noodles/)
+<a href="https://marcofugaro.github.io/three-advanced-techniques/simulations/noodles/"><img src="index.webp" alt="Noodles demo" width="400"></a>
+
+[Live](https://marcofugaro.github.io/three-advanced-techniques/simulations/noodles/)
 
 ### Usage
 
@@ -17,7 +19,7 @@ import { NoodleSimulation } from 'three-advanced-techniques'
 // one curve per noodle: its rest shape and starting pose
 const curves = points.map((p) => new LineCurve3(p, p.clone().add(new Vector3(0, -3, 0))))
 const noodles = new NoodleSimulation(curves, material, { radius: 0.05, particlesPerNoodle: 32 })
-noodles.bendingCompliance = 0.5 // stiffer; every setting can change live
+noodles.bendingCompliance = 0.5 // stiffer
 noodles.bendingPlasticity = 0 // ropes and cables spring back
 noodles.colliders.push(new Sphere(center, 0.5))
 scene.add(noodles)
@@ -44,7 +46,9 @@ renderer.setAnimationLoop((time) => {
 
 Worms are noodles that move themselves: they only add pushes and muscle bends, so the noodle physics, length, bending and collisions, always wins. Everything runs on the GPU, and nothing is read back to the CPU.
 
-[![Worms demo](worms.webp)](https://marcofugaro.github.io/three-advanced-techniques/simulations/noodles/worms.html)
+<a href="https://marcofugaro.github.io/three-advanced-techniques/simulations/noodles/worms.html"><img src="worms.webp" alt="Worms demo" width="400"></a>
+
+[Live](https://marcofugaro.github.io/three-advanced-techniques/simulations/noodles/worms.html)
 
 ### Usage
 

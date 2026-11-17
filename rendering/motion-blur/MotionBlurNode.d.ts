@@ -7,7 +7,6 @@
 //     shutterAngle: 180,
 //   })
 //   renderPipeline.outputNode = blurred
-//   blurred.shutterAngle = 270 // every option is also a property
 
 import { Camera, Node, Renderer, TextureNode, UniformNode } from 'three/webgpu'
 

@@ -2,7 +2,9 @@
 
 The classic mip-chain bloom of the Unreal Bloom, in 8 passes instead of 12, with its wide mips at a quarter of the usual pixels.
 
-[![Bloom demo](index.webp)](https://marcofugaro.github.io/three-advanced-techniques/rendering/bloom/)
+<a href="https://marcofugaro.github.io/three-advanced-techniques/rendering/bloom/"><img src="index.webp" alt="Bloom demo" width="400"></a>
+
+[Live](https://marcofugaro.github.io/three-advanced-techniques/rendering/bloom/)
 
 ## Usage
 
@@ -18,8 +20,6 @@ const bloomNode = bloom(sceneColor, { strength: 1, radius: 0.5, threshold: 0.8 }
 
 const renderPipeline = new RenderPipeline(renderer)
 renderPipeline.outputNode = sceneColor.add(bloomNode)
-
-bloomNode.strength = 0.5 // every option is also a property
 ```
 
 ## Why it's fast

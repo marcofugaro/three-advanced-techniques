@@ -29,7 +29,6 @@
  *   })
  *   renderPipeline.outputNode = blurred
  *   await blurred.compileAsync(renderer) // optional: compiles the compute passes ahead of the first frame
- *   blurred.samples = 32 // every option is also a property
  *
  * Read it from a fullscreen pass (its result is per pixel at uv()). The numeric settings read as their uniform and take
  * a number; the plain ones are read on the CPU each frame. `velocityNode` and `resolutionScale` rebuild the compute

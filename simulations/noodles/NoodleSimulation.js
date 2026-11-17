@@ -61,7 +61,7 @@ import {
  *
  *   const curves = points.map((p) => new THREE.LineCurve3(p, p.clone().add(new THREE.Vector3(0, -3, 0))))
  *   const noodles = new NoodleSimulation(curves, material, { radius: 0.05, particlesPerNoodle: 32 })
- *   noodles.bendingCompliance = 0.5                  // stiffer; every setting is live
+ *   noodles.bendingCompliance = 0.5                  // stiffer
  *   noodles.bendingPlasticity = 0                    // ropes and cables spring back
  *   noodles.colliders.push(new THREE.Sphere(center, 0.5), new Capsule(start, end, 0.1)) // move them in place
  *   scene.add(noodles)

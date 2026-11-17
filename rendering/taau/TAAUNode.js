@@ -27,7 +27,6 @@
  *     camera,
  *     { maxAccumulation: 24 },
  *   )
- *   taauNode.maxAccumulation = 8 // every option is also a property
  *   renderPipeline.outputNode = renderOutput(taauNode.getTextureNode())
  *   await taauNode.compileAsync(renderer) // optional: compiles the passes ahead of the first frame
  *
