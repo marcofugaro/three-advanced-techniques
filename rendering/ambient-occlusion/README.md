@@ -2,9 +2,9 @@
 
 A fast version of GTAO. XeGTAO's ground-truth ambient occlusion, at half resolution, denoised and accumulated over frames. Creases, contact and the gaps between things darken; open surfaces stay clean, with no noise left on them. After Intel's [XeGTAO](https://github.com/GameTechDev/XeGTAO) and Jimenez et al., [_Practical Real-Time Strategies for Accurate Indirect Occlusion_](https://research.activision.com/publications/archives/practical-real-time-strategies-for-accurate-indirect-occlusion) (2016), accumulated as in Schied et al., [_Spatiotemporal Variance-Guided Filtering_](https://research.nvidia.com/publication/2017-07_spatiotemporal-variance-guided-filtering-real-time-reconstruction-path-traced) (2017).
 
-<a href="https://marcofugaro.github.io/three-advanced-techniques/rendering/ambient-occlusion/"><img src="index.webp" alt="Ambient occlusion demo" width="400"></a>
+<a href="https://marcofugaro.github.io/three-advanced-techniques/rendering/ambient-occlusion/"><img src="index.webp" alt="Ambient occlusion demo" width="600"></a>
 
-[Live](https://marcofugaro.github.io/three-advanced-techniques/rendering/ambient-occlusion/)
+#### Live link: https://marcofugaro.github.io/three-advanced-techniques/rendering/ambient-occlusion/
 
 ## Usage
 

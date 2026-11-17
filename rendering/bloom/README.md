@@ -2,9 +2,9 @@
 
 The classic mip-chain bloom of the Unreal Bloom, in 8 passes instead of 12, with its wide mips at a quarter of the usual pixels.
 
-<a href="https://marcofugaro.github.io/three-advanced-techniques/rendering/bloom/"><img src="index.webp" alt="Bloom demo" width="400"></a>
+<a href="https://marcofugaro.github.io/three-advanced-techniques/rendering/bloom/"><img src="index.webp" alt="Bloom demo" width="600"></a>
 
-[Live](https://marcofugaro.github.io/three-advanced-techniques/rendering/bloom/)
+#### Live link: https://marcofugaro.github.io/three-advanced-techniques/rendering/bloom/
 
 ## Usage
 

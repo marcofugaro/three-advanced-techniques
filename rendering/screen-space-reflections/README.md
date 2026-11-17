@@ -2,9 +2,9 @@
 
 Cheap Screen-space Reflections found by Newton's method on the depth buffer instead of a ray march, after Mayer, Assarsson and Sintorn, [_Ultrafast Screen-Space Refractions and Caustics via Newton's Method_](https://jcgt.org/published/0015/01/03/paper.pdf) (2026).
 
-<a href="https://marcofugaro.github.io/three-advanced-techniques/rendering/screen-space-reflections/"><img src="index.webp" alt="Screen-space reflections demo" width="400"></a>
+<a href="https://marcofugaro.github.io/three-advanced-techniques/rendering/screen-space-reflections/"><img src="index.webp" alt="Screen-space reflections demo" width="600"></a>
 
-[Live](https://marcofugaro.github.io/three-advanced-techniques/rendering/screen-space-reflections/)
+#### Live link: https://marcofugaro.github.io/three-advanced-techniques/rendering/screen-space-reflections/
 
 ## Usage
 

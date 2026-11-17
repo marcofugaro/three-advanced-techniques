@@ -2,9 +2,9 @@
 
 Temporal anti-aliasing upscaling: the scene renders jittered, at or below the output's resolution, and each frame joins the history into one stable, anti-aliased image at the output's. Thin features stay locked, edges stay smooth. After Karis, [_High Quality Temporal Supersampling_](https://advances.realtimerendering.com/s2014/) (2014), and AMD's [FidelityFX Super Resolution 2](https://github.com/GPUOpen-Effects/FidelityFX-FSR2) (2022).
 
-<a href="https://marcofugaro.github.io/three-advanced-techniques/rendering/taau/"><img src="index.webp" alt="TAAU demo" width="400"></a>
+<a href="https://marcofugaro.github.io/three-advanced-techniques/rendering/taau/"><img src="index.webp" alt="TAAU demo" width="600"></a>
 
-[Live](https://marcofugaro.github.io/three-advanced-techniques/rendering/taau/)
+#### Live link: https://marcofugaro.github.io/three-advanced-techniques/rendering/taau/
 
 ## Use
 
