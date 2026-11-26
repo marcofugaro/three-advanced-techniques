@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reaction Diffusion</title>
+    <link rel="stylesheet" href="../../utils/lab/lab.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.webgpu.js",
+          "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.webgpu.js",
+          "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.tsl.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/",
+          "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.21.0/dist/lil-gui.esm.js",
+          "stats-gl": "https://cdn.jsdelivr.net/npm/stats-gl@4.2.3/dist/main.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="loading">
+      <p class="loading-title">Reaction diffusion</p>
+      <div class="loading-bar" role="progressbar" aria-label="Loading"></div>
+      <p class="loading-stage" aria-live="polite">Loading</p>
+    </div>
+    <script type="module">
+      import * as THREE from 'three/webgpu'
+      import { color, mix } from 'three/tsl'
+      import { ReactionDiffusionSimulation2D } from './ReactionDiffusionSimulation2D.js'
+      import { Lab } from '../../utils/lab/Lab.js'
+
+      // Reaction diffusion: Gray-Scott growing over a sphere that rests on the lab bench, gold ridges on dark glaze.
+      // The pattern lives on the sphere's vertices and is a few edges wide, so the icosphere's subdivisions
+      // set its scale.
+
+      // Feed and kill rates of Gray-Scott's classic regimes, at diffusion rates 1 and 0.5.
+      const PRESETS = {
+        coral: { feedRate: 0.0545, killRate: 0.062 },
+        mitosis: { feedRate: 0.0367, killRate: 0.0649 },
+        spots: { feedRate: 0.03, killRate: 0.062 },
+        maze: { feedRate: 0.029, killRate: 0.057 },
+        worms: { feedRate: 0.078, killRate: 0.061 },
+        holes: { feedRate: 0.039, killRate: 0.058 },
+      }
+      // Icosphere subdivisions: a finer mesh grows a finer pattern.
+      const DETAILS = { '41k vertices': 63, '92k vertices': 95, '164k vertices': 127 }
+      const STEPS_PER_SECOND = 2400
+      const RADIUS = 0.234 // m
+
+      const params = {
+        preset: 'coral',
+        ...PRESETS.coral,
+        speed: 1,
+        detail: DETAILS['164k vertices'],
+        spin: 1, // turns a minute
+        brushMode: 'seed',
+        brushRadius: 12, // mm
+        relief: 5, // mm
+      }
+
+      const lab = await Lab.create({
+        title: 'Reaction diffusion',
+        hint: 'Hover over the sphere to grow the pattern · R starts over',
+      })
+      lab.gui.controllers.find((controller) => controller.property === 'reset')?.name('Start over (R)')
+      const paint = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+
+      // The sphere rests toward the bench's front, where the camera sees it mid-screen, its ridges' relief clear of the top.
+      const center = new THREE.Vector3(0, RADIUS + 0.004, 0.18)
+
+      // Dark glaze in the grooves, polished gold on the ridges.
+      const material = new THREE.MeshStandardNodeMaterial({ name: 'reaction diffusion' })
+
+      let rd = null
+      function createSimulation() {
+        // Positions and normals only: the simulation welds by position, and the drawn sphere needs no UV seam.
+        const geometry = new THREE.IcosahedronGeometry(RADIUS, params.detail).deleteAttribute('uv')
+        const next = new ReactionDiffusionSimulation2D(geometry, material, {
+          seedFrequency: 15,
+          seedThreshold: 0.8,
+        })
+        geometry.dispose()
+        next.name = 'reaction diffusion'
+        next.position.copy(center)
+        const ridge = next.smoothPatternNode
+        next.material.colorNode = mix(color('#1d2230'), color('#e0b25a'), ridge)
+        next.material.metalnessNode = ridge
+        next.material.roughnessNode = mix(0.38, 0.22, ridge)
+        // Its light-facing side in the shadow maps: three's default, the back faces, is the underside, millimetres over
+        // the bench round the contact, where the bias would light the bench. Front faces would shade the sphere's own
+        // lit side, and a sphere has no shadow of its own to receive.
+        next.material.shadowSide = THREE.FrontSide
+        return next
+      }
+
+      function applySettings() {
+        if (!rd) return
+        rd.feedRate = params.feedRate
+        rd.killRate = params.killRate
+        rd.stepsPerSecond = STEPS_PER_SECOND * params.speed
+        rd.brushMode = params.brushMode
+        rd.brushRadius = params.brushRadius / 1000
+        rd.displacementAmplitude = params.relief / 1000
+        rd.blurIterations = 1 // one pass rounds the drawn ridges; the simulation never sees it
+      }
+
+      // One build at a time, swapped in once its pipelines are built; a change of mesh meanwhile builds again after it.
+      let building = null
+      let built = null // the detail of the sphere drawn
+      async function rebuild() {
+        building ??= (async () => {
+          while (built !== params.detail) {
+            built = params.detail
+            Lab.stage('Building the sphere')
+            await paint()
+            const next = createSimulation()
+            Lab.stage('Compiling the simulation')
+            await next.compileAsync(lab.renderer)
+            if (rd) {
+              next.rotation.copy(rd.rotation)
+              rd.dispose()
+            }
+            rd = next
+            applySettings()
+            lab.add(rd)
+            rd.receiveShadow = false
+          }
+        })().finally(() => (building = null))
+        return building
+      }
+
+      await rebuild()
+
+      // ---- Painting: the mouse paints where it hovers over the sphere, and every drag orbits ----
+
+      const bounds = new THREE.Sphere(center, RADIUS)
+      const stroke = new THREE.Line3()
+      const hit = new THREE.Vector3()
+      const raycaster = new THREE.Raycaster()
+      // ray: a finger's, or null; pointer: the hovering mouse, in NDC, or null; last: the stroke's end, in the sphere's space
+      const brush = { ray: null, pointer: null, last: null }
+
+      const canvas = lab.renderer.domElement
+      canvas.addEventListener('pointermove', (event) => {
+        if (event.pointerType !== 'mouse') return
+        if (event.buttons !== 0) {
+          brush.pointer = null // an orbit
+          return
+        }
+        const rect = canvas.getBoundingClientRect()
+        brush.pointer ??= new THREE.Vector2()
+        brush.pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
+      })
+      canvas.addEventListener('pointerleave', () => (brush.pointer = null))
+
+      // A touch screen has no hover: a finger paints by dragging on the sphere.
+      let pointerType = 'mouse' // the last pointer pressed
+      window.addEventListener('pointerdown', (event) => (pointerType = event.pointerType), { capture: true })
+      lab.onGrab({
+        hit: (ray) => pointerType !== 'mouse' && ray.ray.intersectsSphere(bounds),
+        start: (ray) => Object.assign(brush, { ray: ray.ray.clone(), last: null }),
+        move: (ray) => brush.ray?.copy(ray.ray),
+        end: () => Object.assign(brush, { ray: null, last: null }),
+        cursors: () => null, // the default cursor throughout
+      })
+
+      // This frame's brush: a stroke from the last point painted, which turns with the sphere. The mouse's ray is
+      // cast again each frame, so it follows the camera too.
+      function updateBrush() {
+        let ray = brush.ray
+        if (!ray && brush.pointer) {
+          raycaster.setFromCamera(brush.pointer, lab.camera)
+          ray = raycaster.ray
+        }
+        const point = ray?.intersectSphere(bounds, hit) ?? null
+        if (!point) {
+          rd.brush = null
+          brush.last = null
+          return
+        }
+        rd.brush = brush.last ? stroke.set(rd.localToWorld(stroke.start.copy(brush.last)), point) : point
+        brush.last = rd.worldToLocal(point.clone())
+      }
+
+      lab.onFrame((delta) => {
+        rd.rotation.y += delta * params.spin * ((Math.PI * 2) / 60)
+        updateBrush()
+        rd.update(lab.renderer, delta)
+      })
+      lab.onReset(() => {
+        rd.seed++
+        rd.reset()
+      })
+
+      // ---- GUI ----
+
+      const gui = lab.gui
+      gui.add({ clear: () => rd.clear() }, 'clear').name('Clear')
+      const rates = []
+      gui.add(params, 'preset', Object.keys(PRESETS)).onChange((name) => {
+        Object.assign(params, PRESETS[name])
+        for (const controller of rates) controller.updateDisplay()
+        applySettings()
+        lab.reset() // a regime grows from fresh seeds, not over the last one's pattern
+      })
+      rates.push(gui.add(params, 'feedRate', 0.01, 0.1, 0.0005).name('feed').onChange(applySettings))
+      rates.push(gui.add(params, 'killRate', 0.04, 0.075, 0.0005).name('kill').onChange(applySettings))
+      gui.add(params, 'speed', 0, 3, 0.05).onChange(applySettings)
+      gui.add(params, 'spin', 0, 10, 0.1).name('spin (turns/min)')
+      const brushFolder = gui.addFolder('Brush')
+      brushFolder.add(params, 'brushMode', ['seed', 'erase']).name('mode').onChange(applySettings)
+      brushFolder.add(params, 'brushRadius', 4, 40, 1).name('radius (mm)').onChange(applySettings)
+      const surface = gui.addFolder('Surface')
+      surface.add(params, 'relief', 0, 12, 0.1).name('relief (mm)').onChange(applySettings)
+      surface.add(params, 'detail', DETAILS).name('mesh').onChange(rebuild)
+
+      // The sphere's first frame builds its draw pipelines behind the loading screen.
+      await paint()
+      lab.ready()
+    </script>
+  </body>
+</html>

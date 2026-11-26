@@ -10,85 +10,93 @@
         margin: 0;
         height: 100%;
         overflow: hidden;
-        background: #dddddd;
+        background: #9ea4c1;
       }
       canvas {
         display: block;
         touch-action: none;
       }
-      #hint {
-        position: fixed;
-        left: 50%;
-        bottom: 16px;
-        width: max-content;
-        max-width: calc(100vw - 32px);
-        box-sizing: border-box;
-        margin: 0;
-        padding: 6px 14px;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.55);
-        box-shadow: 0 1px 8px rgba(60, 50, 40, 0.08);
-        backdrop-filter: blur(8px);
-        color: #6f685f;
-        font: 12px/1.4 system-ui, sans-serif;
-        text-align: center;
-        transform: translateX(-50%);
-        pointer-events: none;
-      }
     </style>
-    <script src="../../utils/importmap.js"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.webgpu.js",
+          "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.webgpu.js",
+          "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.tsl.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/",
+          "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.21.0/dist/lil-gui.esm.js",
+          "stats-gl": "https://cdn.jsdelivr.net/npm/stats-gl@4.2.3/dist/main.js"
+        }
+      }
+    </script>
+    <script src="../../utils/loading.js"></script>
   </head>
   <body>
-    <p id="hint">Something moves beneath the pins · point to press · drag to orbit</p>
+    <loading-screen style="--background: #9ea4c1; --color: #2f3046"></loading-screen>
     <script type="module">
       import * as THREE from 'three/webgpu'
       import {
-        Break,
         Fn,
-        If,
-        Loop,
-        abs,
         builtinAOContext,
         clamp,
-        color,
         context,
         exp,
-        float,
+        floor,
         instanceIndex,
         instancedArray,
         length,
         max,
-        min,
-        mix,
         mrt,
+        mx_noise_float,
         normalViewGeometry,
+        output,
         packNormalToRGB,
         pass,
         positionLocal,
+        positionPrevious,
         renderOutput,
         sample,
-        sin,
         smoothstep,
+        uint,
         uniform,
         unpackRGBToNormal,
-        varying,
         vec2,
         vec3,
         vec4,
+        velocity,
       } from 'three/tsl'
       import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
       import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
+      import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
       import GUI from 'lil-gui'
       import Stats from 'stats-gl'
+      import { syncUnjitteredProjection, taau } from '../taau/TAAUNode.js'
       import { xeGTAO } from './XeGTAONode.js'
 
-      // ---- A bright, plain studio: white clay under a soft key light, so the occlusion reads ----
+      // ---- A soft lilac studio: matte clay under a gentle key light, so the occlusion reads ----
 
-      const PAPER = new THREE.Color('#dde0e4')
-      const ORANGE = '#ff8a1a'
+      const HAZE = new THREE.Color('#9ea1e0')
+      const CLAY = '#8083c0'
 
-      const renderer = new THREE.WebGPURenderer({ antialias: true })
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+      const params = {
+        ao: true,
+        aoResolution: 0.5, // × the scene pass
+        view: 'beauty',
+        speed: 1,
+        height: 0.4,
+        haze: `#${HAZE.getHexString()}`,
+        shadowMapSize: 1024,
+        // Resolution, as worm-monster's desktop tier: the scene's pixels per CSS pixel, one of RENDER_PIXEL_RATIOS,
+        // which TAAU upscales to the output's
+        renderPixelRatio: 1,
+      }
+      const RENDER_PIXEL_RATIOS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
+      const MAX_PIXEL_RATIO = 2 // the output's pixels per CSS pixel at most
+
+      const loading = document.querySelector('loading-screen')
+      // No canvas MSAA: TAAU antialiases the scene pass
+      const renderer = new THREE.WebGPURenderer({ antialias: false })
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO))
       renderer.setSize(window.innerWidth, window.innerHeight)
       renderer.toneMapping = THREE.AgXToneMapping
       renderer.shadowMap.enabled = true
@@ -101,34 +109,42 @@
       stats.init(renderer)
 
       const scene = new THREE.Scene()
-      scene.background = PAPER
-      scene.fog = new THREE.Fog(PAPER)
+      scene.background = HAZE
+      scene.fog = new THREE.Fog(HAZE)
 
       const pmrem = new THREE.PMREMGenerator(renderer)
       scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
-      scene.environmentIntensity = 1.35
+      scene.environmentIntensity = 0.7
       pmrem.dispose()
 
-      const key = new THREE.DirectionalLight('#fff6ee', 1.1)
-      key.position.set(-3.5, 7, 2.5)
+      const key = new THREE.DirectionalLight('#fff8f0', 1.9)
+      key.position.set(-4, 7, 3)
       key.castShadow = true
-      key.shadow.mapSize.setScalar(2048)
-      key.shadow.camera.left = key.shadow.camera.bottom = -3.8
-      key.shadow.camera.right = key.shadow.camera.top = 3.8
-      key.shadow.camera.near = 2
-      key.shadow.camera.far = 16
+      key.shadow.mapSize.setScalar(params.shadowMapSize)
+      key.shadow.camera.left = key.shadow.camera.bottom = -10
+      key.shadow.camera.right = key.shadow.camera.top = 10
+      key.shadow.camera.near = 1
+      key.shadow.camera.far = 20
       key.shadow.bias = -0.0004
       key.shadow.normalBias = 0.01
-      key.shadow.radius = 3
+      key.shadow.radius = 6
       scene.add(key)
 
       const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 80)
       const controls = new OrbitControls(camera, renderer.domElement)
-      controls.target.set(0.3, -0.25, 0.75)
+      controls.target.set(0, 0.6, 0)
       controls.enableDamping = true
-      controls.minDistance = 1.5
-      controls.maxDistance = 26
-      controls.maxPolarAngle = THREE.MathUtils.degToRad(80)
+      controls.minDistance = 2
+      controls.maxDistance = 18
+      controls.maxPolarAngle = THREE.MathUtils.degToRad(75)
+
+      // A narrow screen backs off to keep about the same width in view.
+      const halfWidth = Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect)
+      const distance = THREE.MathUtils.clamp(4.47 / Math.tan(halfWidth), 5, 12)
+      camera.position.set(5.495, 5.164, 1.312).setLength(distance).add(controls.target)
+      scene.fog.near = distance + 1
+      scene.fog.far = 30
+      controls.update()
 
       window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth / window.innerHeight
@@ -136,213 +152,161 @@
         renderer.setSize(window.innerWidth, window.innerHeight)
       })
 
-      // ---- A pin-art board: pins pushed up by shapes moving beneath it ----
+      // ---- A field of hexagonal prisms stepping up and down: tubes, solid blocks and engraved tiles ----
 
-      const SIDE = 72 // pins per side
-      const COUNT = SIDE * SIDE
-      const PITCH = 0.064
-      const PIN = 0.027 // radius
-      const DOME = 0.55 * PIN // height of the pin's rounded head
-      const TRAVEL = 0.6 // the highest a pin rises
-      const REST = 0.016 // a resting pin's top above the plate
-      const BOARD = SIDE * PITCH
-      const DEPTH = 0.8 // of the board, down to the floor
+      const SIZE = 0.5 // a cell's circumradius
+      const RINGS = 18 // cells from the center to the field's edge
+      const LEVELS = 4 // the heights a cell steps between, from the floor up
+      const BODY = 3.2 // a prism's length below its top, enough to reach under the floor at any height
+      const FLOOR = -0.75
+      const PRESS_RADIUS = 1.8
 
-      // Close in on the pins; a narrow screen backs off to keep the same width in view.
-      const halfWidth = Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect)
-      const distance = THREE.MathUtils.clamp(2.25 / Math.tan(halfWidth), 4, 24)
-      camera.position.set(3.4, 6, 6.85).setLength(distance).add(controls.target)
-      scene.fog.near = distance + 4
-      scene.fog.far = distance + 22
-      controls.update()
-
-      const params = { ao: true, view: 'beauty', shape: 'cycle', speed: 1, memory: 0.8, peakColor: true }
-
-      // The pins' lifts: the shapes' top surface beneath each one, falling back over `memory` seconds.
-      const lifts = instancedArray(COUNT, 'float')
-      const pinXZ = (index) => vec2(float(index.mod(SIDE)), float(index.div(SIDE))).add(0.5).mul(PITCH).sub(BOARD / 2)
-
-      // Floor, frame and plate.
-      const floor = new THREE.Mesh(
-        new THREE.CircleGeometry(60, 96).rotateX(-Math.PI / 2).translate(0, -DEPTH, 0),
-        new THREE.MeshStandardNodeMaterial({ color: PAPER, roughness: 0.9 }),
-      )
-      floor.receiveShadow = true
-
-      const roundedRect = (half, radius, path = new THREE.Shape()) => {
-        const h = half - radius
-        path.moveTo(-h, -half)
-        path.lineTo(h, -half)
-        path.absarc(h, -h, radius, -Math.PI / 2, 0)
-        path.lineTo(half, h)
-        path.absarc(h, h, radius, 0, Math.PI / 2)
-        path.lineTo(-h, half)
-        path.absarc(-h, h, radius, Math.PI / 2, Math.PI)
-        path.lineTo(-half, -h)
-        path.absarc(-h, -h, radius, Math.PI, Math.PI * 1.5)
+      // The prisms' shapes, each one drawn once per cell of its kind.
+      const hexagon = (radius, path = new THREE.Shape()) => {
+        for (let i = 0; i < 6; i++) {
+          const angle = (i / 6) * Math.PI * 2
+          if (i === 0) path.moveTo(radius * Math.cos(angle), radius * Math.sin(angle))
+          else path.lineTo(radius * Math.cos(angle), radius * Math.sin(angle))
+        }
+        path.closePath()
         return path
       }
-      const outline = roundedRect(BOARD / 2 + 0.18, 0.14)
-      outline.holes.push(roundedRect(BOARD / 2 + 0.012, 0.02, new THREE.Path()))
-      const RIM = 0.06
-      const frameGeometry = new THREE.ExtrudeGeometry(outline, {
-        depth: DEPTH + RIM - 0.024,
-        bevelEnabled: true,
-        bevelThickness: 0.012,
-        bevelSize: 0.012,
-        bevelSegments: 4,
-        curveSegments: 12,
-      })
-        .rotateX(-Math.PI / 2)
-        .translate(0, -DEPTH + 0.012, 0)
-      const clay = new THREE.MeshStandardNodeMaterial({ color: '#f1f2f4', roughness: 0.55 })
-      const frame = new THREE.Mesh(frameGeometry, clay)
-      const plate = new THREE.Mesh(
-        new THREE.BoxGeometry(BOARD + 0.03, DEPTH, BOARD + 0.03).translate(0, -DEPTH / 2, 0),
-        new THREE.MeshStandardNodeMaterial({ color: '#c9cdd3', roughness: 0.8 }),
-      )
-      frame.castShadow = frame.receiveShadow = plate.receiveShadow = true
-      scene.add(floor, frame, plate)
-
-      // The pins: one lathed pin drawn COUNT times, placed on the grid and lifted in its vertex shader.
-      const profile = [new THREE.Vector2(PIN, -TRAVEL - 0.12)]
-      for (let i = 0; i <= 3; i++) {
-        const angle = (i / 3) * (Math.PI / 2)
-        profile.push(new THREE.Vector2(PIN * Math.cos(angle), DOME * (Math.sin(angle) - 1)))
+      const hexRing = (outer, inner) => {
+        const shape = hexagon(outer)
+        shape.holes.push(hexagon(inner, new THREE.Path()))
+        return shape
       }
-      const pinMaterial = new THREE.MeshStandardNodeMaterial({ roughness: 0.42 })
-      const lift = lifts.element(instanceIndex)
-      const xz = pinXZ(instanceIndex)
-      pinMaterial.positionNode = positionLocal.add(vec3(xz.x, lift.add(REST), xz.y))
-      // white at rest, a hint of orange where they're pushed highest
-      const uPeakColor = uniform(1)
-      const raised = smoothstep(0.04, 0.5, varying(lift))
-      pinMaterial.colorNode = mix(color('#f8f8f7'), color(ORANGE), raised.mul(0.5).mul(uPeakColor))
-      const pins = new THREE.Mesh(new THREE.LatheGeometry(profile, 10), pinMaterial)
-      pins.count = COUNT
-      pins.frustumCulled = false
-      pins.castShadow = pins.receiveShadow = true
-      scene.add(pins)
+      // `shape` from `top` down to `bottom`, its top edges rounded inward by `bevel`
+      const prism = (shape, top, bottom, bevel = 0) =>
+        new THREE.ExtrudeGeometry(shape, {
+          depth: top - bottom - 2 * bevel,
+          bevelEnabled: bevel > 0,
+          bevelThickness: bevel,
+          bevelSize: bevel,
+          bevelOffset: -bevel,
+          bevelSegments: 3,
+        })
+          .rotateX(-Math.PI / 2)
+          .translate(0, bottom + bevel, 0)
 
-      // The shapes beneath, as signed distances in board space: three pebbles that merge, a wobbling ring, a tumbling
-      // cube, dunes and the pointer's fingertip. A sunk shape sits below the pins' reach.
-      const PEBBLES = [
-        { radius: 0.6, top: 0.42, phase: 0 },
-        { radius: 0.46, top: 0.36, phase: 2.1 },
-        { radius: 0.34, top: 0.3, phase: 4.2 },
+      const OUTER = SIZE - 0.012 / Math.sqrt(3) // a hairline gap between neighbours
+      const BEVEL = 0.022
+      const HOLE = 0.29
+      const GROOVE = 0.3
+      const tube = mergeGeometries([
+        prism(hexRing(OUTER, HOLE), 0, -BODY, BEVEL),
+        prism(hexagon(HOLE + 0.02), -0.6, -0.65), // the tube's floor
+      ])
+      const block = prism(hexagon(OUTER), 0, -BODY, BEVEL)
+      const tile = mergeGeometries([
+        prism(hexRing(OUTER, GROOVE), 0, -BODY, BEVEL),
+        prism(hexagon(GROOVE - 0.03), 0, -0.1, 0.008),
+        prism(hexagon(GROOVE + 0.02), -0.04, -0.1), // the groove's floor
+      ])
+
+      // Flat-topped cells, grouped by kind so each kind draws as one contiguous range.
+      const KINDS = [
+        { geometry: tube, share: 0.5, cells: [] },
+        { geometry: block, share: 0.2, cells: [] },
+        { geometry: tile, share: 0.3, cells: [] },
       ]
-      const SHAPES = ['pebbles', 'ring', 'cube', 'dunes']
-      const SINK = 1.9
-      const FINGER = 0.24 // radius
-      const uPebbles = PEBBLES.map(() => uniform(new THREE.Vector3(0, -SINK, 0)))
-      const uRingCenter = uniform(new THREE.Vector3(0, -SINK, 0))
-      const uRingRotation = uniform(new THREE.Matrix3()) // board → ring space
-      const uCubeCenter = uniform(new THREE.Vector3(0, -SINK, 0))
-      const uCubeRotation = uniform(new THREE.Matrix3())
-      const uFinger = uniform(new THREE.Vector3(0, -SINK, 0))
-      const uDunes = uniform(0)
+      THREE.MathUtils.seededRandom(3)
+      const random = () => THREE.MathUtils.seededRandom()
+      for (let q = -RINGS; q <= RINGS; q++) {
+        for (let r = Math.max(-RINGS, -q - RINGS); r <= Math.min(RINGS, -q + RINGS); r++) {
+          const pick = random()
+          let sum = 0
+          const kind = KINDS.find(({ share }) => pick < (sum += share)) ?? KINDS.at(-1)
+          const x = SIZE * 1.5 * q
+          const z = SIZE * Math.sqrt(3) * (r + q / 2)
+          // its level offset, so steps don't follow the noise's contours exactly, and its spring's stiffness
+          kind.cells.push(x, z, 1.7 + (random() - 0.5) * 0.7, 70 + random() * 40)
+        }
+      }
+      const COUNT = KINDS.reduce((sum, { cells }) => sum + cells.length / 4, 0)
+
+      const cellData = new Float32Array(KINDS.flatMap(({ cells }) => cells))
+      const cells = instancedArray(cellData, 'vec4') // x, z, level offset, stiffness
+      const states = instancedArray(COUNT, 'vec2') // height, velocity
+
+      // Each kind's cells, lifted to their heights in the vertex shader.
+      let first = 0
+      for (const { geometry, cells: kindCells } of KINDS) {
+        const cell = instanceIndex.add(uint(first))
+        const at = cells.element(cell)
+        const material = new THREE.MeshStandardNodeMaterial({ color: CLAY, roughness: 0.62 })
+        material.positionNode = Fn((builder) => {
+          const state = states.element(cell)
+          // the height before this frame's step, for the motion vectors TAAU reprojects by
+          if (builder.needsPreviousData()) {
+            positionPrevious.assign(positionLocal.add(vec3(at.x, state.x.sub(state.y.mul(uDelta)), at.y)))
+          }
+          return positionLocal.add(vec3(at.x, state.x, at.y))
+        })()
+        geometry.deleteAttribute('uv')
+        const mesh = new THREE.Mesh(geometry, material)
+        mesh.count = kindCells.length / 4
+        mesh.frustumCulled = false
+        mesh.castShadow = mesh.receiveShadow = true
+        scene.add(mesh)
+        first += mesh.count
+      }
+
+      const ground = new THREE.Mesh(
+        new THREE.CircleGeometry(60, 96).rotateX(-Math.PI / 2).translate(0, FLOOR, 0),
+        new THREE.MeshStandardNodeMaterial({ color: CLAY, roughness: 0.8 }),
+      )
+      ground.receiveShadow = true
+      scene.add(ground)
+
+      // Per cell: step to a level of a slowly drifting noise, pressed down around the pointer, and spring to it.
       const uTime = uniform(0)
       const uDelta = uniform(0)
-      const uMemory = uniform(params.memory)
-
-      const sphere = (p, center, radius) => length(p.sub(center)).sub(radius)
-      const smin = (a, b, k) => {
-        const h = max(float(k).sub(abs(a.sub(b))), 0).div(k)
-        return min(a, b).sub(h.mul(h).mul(k / 4))
-      }
-      const field = (p) => {
-        const [a, b, c] = PEBBLES.map(({ radius }, i) => sphere(p, uPebbles[i], radius))
-        const pebbles = smin(smin(a, b, 0.35), c, 0.35)
-        const q = uRingRotation.mul(p.sub(uRingCenter))
-        const ring = length(vec2(length(q.xz).sub(1.05), q.y)).sub(0.26)
-        const r = abs(uCubeRotation.mul(p.sub(uCubeCenter))).sub(0.62 - 0.12)
-        const cube = length(max(r, 0)).add(min(max(r.x, max(r.y, r.z)), 0)).sub(0.12)
-        // a pin rises once any part of a shape is under its footprint
-        return smin(min(pebbles, min(ring, cube)), sphere(p, uFinger, FINGER), 0.25).sub(PIN)
-      }
-
-      // Per pin: march down from above its reach to the shapes' top surface.
-      const updatePins = Fn(() => {
-        const at = pinXZ(instanceIndex)
-        const y = float(TRAVEL + 0.1).toVar()
-        const top = float(0).toVar()
-        Loop(48, () => {
-          const d = field(vec3(at.x, y, at.y))
-          If(d.lessThan(0.002), () => {
-            top.assign(y)
-            Break()
-          })
-          y.subAssign(max(d, 0.003))
-          If(y.lessThan(0), () => {
-            Break()
-          })
-        })
-        const wave = sin(at.x.mul(2.3).add(sin(at.y.mul(1.1).add(uTime.mul(0.4))).mul(1.6)).sub(uTime.mul(0.9)))
-        const dunes = wave.mul(0.5).add(0.5).pow(3).mul(0.34).mul(uDunes)
-        const target = clamp(max(top, dunes), 0, TRAVEL)
-        const current = lifts.element(instanceIndex)
-        // pushed up at once, settling back as the shapes move on
-        const settled = mix(target, current, exp(uDelta.negate().div(max(uMemory, 0.01))))
-        current.assign(max(target, settled))
+      const uStep = uniform(params.height)
+      const uPointer = uniform(new THREE.Vector3()) // x, z, press
+      const updateCells = Fn(() => {
+        const cell = cells.element(instanceIndex)
+        const state = states.element(instanceIndex)
+        const xz = cell.xy
+        const drift = vec3(xz.x.mul(0.3).add(uTime.mul(0.05)), uTime.mul(0.08), xz.y.mul(0.3))
+        const level = clamp(floor(mx_noise_float(drift).mul(LEVELS * 1.5).add(cell.z)), 0, LEVELS - 1)
+        const press = smoothstep(0, PRESS_RADIUS, length(xz.sub(uPointer.xy))).oneMinus().mul(uPointer.z)
+        const target = max(level.sub(floor(press.mul(LEVELS + 1))), -1).mul(uStep)
+        const height = state.x.toVar()
+        const velocity = state.y.toVar()
+        velocity.addAssign(target.sub(height).mul(cell.w).mul(uDelta))
+        velocity.mulAssign(exp(uDelta.mul(-11)))
+        height.addAssign(velocity.mul(uDelta))
+        state.assign(vec2(height, velocity))
       })().compute(COUNT)
 
-      // CPU side: which shape is up, and where each one is.
-      const level = Object.fromEntries(SHAPES.map((name) => [name, 0]))
-      const ease = (x) => x * x * (3 - 2 * x)
-      const euler = new THREE.Euler()
-      const rotation = new THREE.Matrix4()
-      const axis = new THREE.Vector3(1, 1, 0.4).normalize()
-      const finger = { target: new THREE.Vector3(), position: new THREE.Vector3(), over: false, press: 0 }
-      let time = 0
+      // The pointer presses wherever it points on the field.
+      const pointer = { target: new THREE.Vector2(), position: new THREE.Vector2(), over: false, press: 0 }
+      const raycaster = new THREE.Raycaster()
+      const ndc = new THREE.Vector2()
+      const surface = new THREE.Plane(new THREE.Vector3(0, 1, 0))
+      const hit = new THREE.Vector3()
+      renderer.domElement.addEventListener('pointermove', (event) => {
+        ndc.set((event.clientX / window.innerWidth) * 2 - 1, -(event.clientY / window.innerHeight) * 2 + 1)
+        raycaster.setFromCamera(ndc, camera)
+        surface.constant = -1.5 * params.height
+        const onField =
+          raycaster.ray.intersectPlane(surface, hit) !== null && Math.hypot(hit.x, hit.z) < RINGS * 0.7
+        if (onField && !pointer.over && pointer.press < 0.05) pointer.position.set(hit.x, hit.z)
+        if (onField) pointer.target.set(hit.x, hit.z)
+        pointer.over = onField
+      })
+      renderer.domElement.addEventListener('pointerleave', () => (pointer.over = false))
 
+      let time = 0
       function animate(delta) {
         time += delta * params.speed
         uTime.value = time
         uDelta.value = delta
-        uMemory.value = params.memory
-        const active = params.shape === 'cycle' ? SHAPES[Math.floor(time / 8) % SHAPES.length] : params.shape
-        for (const name of SHAPES) {
-          level[name] += ((name === active ? 1 : 0) - level[name]) * (1 - Math.exp(-delta * 1.2))
-        }
-        const sink = (name) => (ease(level[name]) - 1) * SINK
-
-        PEBBLES.forEach(({ radius, top, phase }, i) => {
-          const x = 1.25 * Math.sin(time * 0.37 + phase)
-          const z = 1.25 * Math.sin(time * 0.29 + phase * 1.7 + 1)
-          uPebbles[i].value.set(x, top - radius + sink('pebbles'), z)
-        })
-
-        uRingCenter.value.set(0.35 * Math.sin(time * 0.21), -0.1 + sink('ring'), 0.35 * Math.cos(time * 0.17))
-        euler.set(Math.sin(time * 0.53) * 0.55, time * 0.4, Math.cos(time * 0.41) * 0.35)
-        uRingRotation.value.setFromMatrix4(rotation.makeRotationFromEuler(euler)).transpose()
-
-        uCubeCenter.value.set(0, -0.5 + sink('cube'), 0)
-        uCubeRotation.value.setFromMatrix4(rotation.makeRotationAxis(axis, time * 0.45)).transpose()
-
-        uDunes.value = ease(level.dunes)
-
-        finger.press += ((finger.over ? 1 : 0) - finger.press) * (1 - Math.exp(-delta * 8))
-        finger.position.lerp(finger.target, 1 - Math.exp(-delta * 14))
-        uFinger.value.set(finger.position.x, 0.4 - FINGER + (finger.press - 1) * SINK, finger.position.z)
+        pointer.press += ((pointer.over ? 1 : 0) - pointer.press) * (1 - Math.exp(-delta * 6))
+        pointer.position.lerp(pointer.target, 1 - Math.exp(-delta * 12))
+        uPointer.value.set(pointer.position.x, pointer.position.y, pointer.press)
       }
-
-      // The pointer presses wherever it points on the board.
-      const raycaster = new THREE.Raycaster()
-      const pointer = new THREE.Vector2()
-      const surface = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.2)
-      const hit = new THREE.Vector3()
-      renderer.domElement.addEventListener('pointermove', (event) => {
-        pointer.set((event.clientX / window.innerWidth) * 2 - 1, -(event.clientY / window.innerHeight) * 2 + 1)
-        raycaster.setFromCamera(pointer, camera)
-        const onBoard =
-          raycaster.ray.intersectPlane(surface, hit) !== null &&
-          Math.abs(hit.x) < BOARD / 2 &&
-          Math.abs(hit.z) < BOARD / 2
-        if (onBoard && !finger.over && finger.press < 0.05) finger.position.copy(hit)
-        if (onBoard) finger.target.copy(hit)
-        finger.over = onBoard
-      })
-      renderer.domElement.addEventListener('pointerleave', () => (finger.over = false))
 
       // ---- Ambient occlusion: XeGTAO on an opaque prepass, darkening only the ambient light ----
 
@@ -355,20 +319,49 @@
 
       const occlusion = xeGTAO(prePass.getTextureNode('depth'), camera, {
         normalNode: prePassNormal,
-        radius: 0.35,
-        thinOccluder: 0.2,
+        radius: 0.6,
       })
       const aoContext = builtinAOContext(occlusion.getMaterialAONode())
 
-      const scenePass = pass(scene, camera)
+      // ---- TAAU: the jittered scene, with the motion it reprojects by, accumulated into an anti-aliased image ----
+
+      const scenePass = pass(scene, camera, { samples: 0 })
+      scenePass.setMRT(mrt({ output, velocity }))
+      const velocityTexture = scenePass.getTexture('velocity')
+      velocityTexture.type = THREE.HalfFloatType // RG16F
+      velocityTexture.format = THREE.RGFormat
+      const sceneColor = scenePass.getTextureNode('output')
+      const taauNode = taau(sceneColor, scenePass.getTextureNode('depth'), scenePass.getTextureNode('velocity'), camera)
+
+      // The scene pass and its prepass at renderPixelRatio, XeGTAO at aoResolution of it; TAAU upscales them to the
+      // output's pixel ratio.
+      const sceneScale = () => Math.min(1, params.renderPixelRatio / renderer.getPixelRatio())
+      function setSampling() {
+        const scale = sceneScale()
+        for (const node of [scenePass, prePass]) node.setResolutionScale(scale)
+        occlusion.resolutionScale = params.aoResolution * scale
+      }
+      // The output's pixel ratio, and the scene's share of it: a move to another display changes the device's.
+      function setPixelRatio() {
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO))
+        setSampling()
+      }
+      setSampling()
+      window.addEventListener('resize', setPixelRatio)
+
       const pipeline = new THREE.RenderPipeline(renderer)
       pipeline.outputColorTransform = false
+      let resolving = false
       function setOutput() {
         scenePass.contextNode = params.ao ? aoContext : null
         scenePass.needsUpdate = true
+        // The occlusion view shows the AO as computed, unjittered; TAAU's history goes stale meanwhile.
+        const resolve = params.view === 'beauty'
+        if (resolve && !resolving) taauNode.resetHistory()
+        resolving = resolve
         // both views tone-map with AgX
         const ao = vec4(vec3(occlusion.getAONode()), 1)
-        pipeline.outputNode = renderOutput(params.view === 'occlusion' ? ao : scenePass.getTextureNode())
+        pipeline.outputNode = renderOutput(params.view === 'occlusion' ? ao : taauNode.getTextureNode())
         pipeline.needsUpdate = true
       }
       setOutput()
@@ -380,26 +373,63 @@
       gui.add(occlusion.radius, 'value', 0.05, 1, 0.01).name('radius (m)')
       gui.add(occlusion.intensity, 'value', 0, 1, 0.01).name('intensity')
       gui.add(occlusion.power, 'value', 0.5, 4, 0.05).name('power')
-      gui.add(occlusion, 'resolutionScale', 0.25, 1, 0.05).name('resolution')
+      gui.add(params, 'aoResolution', 0.25, 1, 0.25).name('resolution').onChange(setSampling)
       gui.add(occlusion, 'temporalAccumulation').name('temporal accumulation')
-      const board = gui.addFolder('Pins')
-      board.add(params, 'shape', ['cycle', ...SHAPES])
-      board.add(params, 'speed', 0, 3, 0.01)
-      board.add(params, 'memory', 0, 3, 0.01).name('memory (s)')
-      board.add(params, 'peakColor').name('peak color').onChange((value) => (uPeakColor.value = value ? 1 : 0))
+      gui.add(occlusion, 'historyFix').name('history fix')
+      gui.add(occlusion, 'motionSliceCount', 2, 4, 1).name('slices in motion')
+      // Logs the current view as code for the camera's start, and copies it. The width in view stands in for the
+      // distance, so a narrow screen still backs off.
+      const view = {
+        log() {
+          const xyz = (vector) => vector.toArray().map((value) => +value.toFixed(3)).join(', ')
+          const offset = camera.position.clone().sub(controls.target)
+          const halfWidth = Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect)
+          const width = +(offset.length() * Math.tan(halfWidth)).toFixed(2)
+          const code = [
+            `controls.target.set(${xyz(controls.target)})`,
+            `const distance = THREE.MathUtils.clamp(${width} / Math.tan(halfWidth), 5, 12)`,
+            `camera.position.set(${xyz(offset)}).setLength(distance).add(controls.target)`,
+          ].join('\n')
+          console.log(code)
+          navigator.clipboard?.writeText(code).catch(() => {})
+        },
+      }
+      gui.add(view, 'log').name('log view')
+      const field = gui.addFolder('Hexagons')
+      field.add(params, 'speed', 0, 3, 0.01)
+      field.add(params, 'height', 0.1, 0.6, 0.01).name('step (m)').onChange((value) => (uStep.value = value))
+      const haze = gui.addFolder('Fog')
+      haze.add(scene.fog, 'near', 0, 40, 0.1).decimals(1).name('near (m)')
+      haze.add(scene.fog, 'far', 1, 60, 0.1).decimals(1).name('far (m)')
+      haze.addColor(params, 'haze').name('color').onChange((value) => {
+        scene.fog.color.set(value)
+        scene.background.set(value)
+      })
+      const shadow = gui.addFolder('Shadow')
+      shadow.add(key.shadow, 'intensity', 0, 1, 0.01)
+      shadow.add(key.shadow, 'radius', 0, 10, 0.1).name('softness')
+      shadow.add(key.shadow, 'bias', -0.005, 0.005, 0.0001)
+      shadow.add(key.shadow, 'normalBias', 0, 0.1, 0.001).name('normal bias')
+      shadow.add(params, 'shadowMapSize', [512, 1024, 2048, 4096]).name('map size').onChange((value) => key.shadow.mapSize.setScalar(value))
+      const resolution = gui.addFolder('Resolution')
+      resolution.add(params, 'renderPixelRatio', RENDER_PIXEL_RATIOS).name('render pixel ratio').onChange(setSampling)
 
+      await loading.stage('Compiling shaders…')
+      await taauNode.compileAsync(renderer)
       const timer = new THREE.Timer()
       timer.connect(document)
       renderer.setAnimationLoop((now) => {
         timer.update(now)
         animate(Math.min(timer.getDelta(), 1 / 20))
-        renderer.compute(updatePins)
+        renderer.compute(updateCells)
         controls.update()
+        syncUnjitteredProjection(camera) // kept live while the occlusion view leaves TAAU out
         pipeline.render()
         stats.update()
         renderer.resolveTimestampsAsync('compute')
         renderer.resolveTimestampsAsync('render')
       })
+      loading.done()
     </script>
   </body>
 </html>

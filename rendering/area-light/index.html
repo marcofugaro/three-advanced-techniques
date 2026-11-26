@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Area light</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #a9b4bf;
+      }
+      canvas {
+        display: block;
+        touch-action: none;
+      }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.webgpu.js",
+          "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.webgpu.js",
+          "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.tsl.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/",
+          "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.21.0/dist/lil-gui.esm.js",
+          "stats-gl": "https://cdn.jsdelivr.net/npm/stats-gl@4.2.3/dist/main.js"
+        }
+      }
+    </script>
+    <script src="../../utils/loading.js"></script>
+  </head>
+  <body>
+    <loading-screen style="--background: #a9b4bf; --color: #2c3138"></loading-screen>
+    <script type="module">
+      import * as THREE from 'three/webgpu'
+      import { color, frontFacing, materialColor, mix, mrt, mx_fractal_noise_float, mx_noise_float, output, pass, renderOutput, smoothstep, texture, uv, vec2, vec3, vec4, velocity } from 'three/tsl'
+      import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+      import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+      import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
+      import { SkyMesh } from 'three/addons/objects/SkyMesh.js'
+      import GUI from 'lil-gui'
+      import Stats from 'stats-gl'
+      import { syncUnjitteredProjection, taau } from '../taau/TAAUNode.js'
+      import { RectAreaLightShadow, RectAreaLightShadowHelper } from './RectAreaLightShadow.js'
+
+      // ---- A seamless backdrop at dusk under one softbox: a runner, a spinning knot, a bobbing box and a pillar ----
+
+      const loading = document.querySelector('loading-screen')
+
+      const params = {
+        shadow: true,
+        width: 1, // the softbox's sides, in metres: larger is softer, at the same power
+        height: 1,
+        power: 300, // intensity × area
+        azimuth: -55, // degrees about the set, from the front toward the right
+        elevation: 50, // degrees
+        orbit: false, // the softbox circles the set
+        pace: 1, // the run's playback rate
+        spin: 0.6, // the knot's turn, in rad/s
+        bob: 1, // the box's bob, in rad/s
+        view: 'beauty',
+        boxes: false,
+        lightSamples: 4,
+        resolutionScale: 0.5,
+        accumulation: true,
+        exposure: 0.6,
+        fov: 32,
+        // Resolution, as worm-monster's desktop tier: the scene's pixels per CSS pixel, one of RENDER_PIXEL_RATIOS,
+        // which TAAU upscales to the output's
+        renderPixelRatio: 1,
+      }
+      const RENDER_PIXEL_RATIOS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
+      const MAX_PIXEL_RATIO = 2 // the output's pixels per CSS pixel at most
+
+      const renderer = new THREE.WebGPURenderer({ antialias: false }) // TAAU anti-aliases
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO))
+      renderer.setSize(window.innerWidth, window.innerHeight)
+      renderer.toneMapping = THREE.AgXToneMapping
+      renderer.toneMappingExposure = params.exposure
+      document.body.appendChild(renderer.domElement)
+      await renderer.init()
+
+      const stats = new Stats({ trackGPU: renderer.hasFeature('timestamp-query') })
+      document.body.appendChild(stats.dom)
+      stats.init(renderer)
+
+      const scene = new THREE.Scene()
+      scene.fog = new THREE.FogExp2('#c6d1dc', 0.006) // the haze toward the horizon
+
+      const camera = new THREE.PerspectiveCamera(params.fov, window.innerWidth / window.innerHeight, 0.1, 2000)
+      const controls = new OrbitControls(camera, renderer.domElement)
+      controls.target.set(0, 0.9, -0.3)
+      controls.enableDamping = true
+      // outside the runner, within the sweep's width and above the floor
+      controls.minDistance = 1
+      controls.maxDistance = 20
+      controls.minAzimuthAngle = -1.4
+      controls.maxAzimuthAngle = 1.4
+      controls.maxPolarAngle = THREE.MathUtils.degToRad(89)
+
+      // A narrow screen backs off to keep the set in view.
+      const halfWidth = Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect)
+      const distance = THREE.MathUtils.clamp(2.8 / Math.tan(halfWidth), 8.5, 14)
+      camera.position.set(1.2, 2.6, 5.8).setLength(distance).add(controls.target)
+      controls.update()
+
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight
+        camera.updateProjectionMatrix()
+        renderer.setSize(window.innerWidth, window.innerHeight)
+      })
+
+      // ---- The set: a painted backdrop out at dusk, the sun down behind it ----
+
+      const sky = new SkyMesh()
+      sky.scale.setScalar(1000)
+      sky.turbidity.value = 3
+      sky.sunPosition.value.setFromSphericalCoords(1, THREE.MathUtils.degToRad(88), Math.PI) // low, behind the wall
+      scene.add(sky)
+
+      // The fill: the dusk sky and the ground, unshadowed, so the softbox's shadows lift to it.
+      scene.add(new THREE.HemisphereLight('#b4c4d6', '#6c6862', 0.6))
+
+      // Receivers only: a casting floor would become a floor-sized caster box.
+      const ground = new THREE.Mesh(
+        new THREE.CircleGeometry(400, 64).rotateX(-Math.PI / 2),
+        new THREE.MeshStandardNodeMaterial({ name: 'ground', color: '#a9aeb3', roughness: 1 }),
+      )
+      ground.name = 'ground'
+      scene.add(ground)
+
+      // A seamless sweep: a painted muslin floor that bends up into a wall, wide and tall enough to fill every view.
+      const SWEEP = { width: 50, front: 9, back: -3.5, radius: 2, height: 8 }
+      const profile = [[SWEEP.back - SWEEP.radius, SWEEP.height]] // z, y: from the wall's top to the floor's front
+      for (let i = 0; i <= 24; i++) {
+        const t = (1 - i / 24) * (Math.PI / 2)
+        profile.push([SWEEP.back - SWEEP.radius * Math.sin(t), SWEEP.radius * (1 - Math.cos(t))])
+      }
+      profile.push([SWEEP.front, 0])
+      const along = [0] // m down the profile, for a texture without stretch
+      for (let row = 1; row < profile.length; row++) {
+        along.push(along[row - 1] + Math.hypot(profile[row][0] - profile[row - 1][0], profile[row][1] - profile[row - 1][1]))
+      }
+      const LENGTH = along.at(-1)
+      const sweepGeometry = new THREE.PlaneGeometry(SWEEP.width, 1, 1, profile.length - 1)
+      const position = sweepGeometry.attributes.position
+      const uvs = sweepGeometry.attributes.uv
+      for (let i = 0; i < position.count; i++) {
+        const row = Math.floor(i / 2) // two vertices a row, rows top to bottom
+        const [z, y] = profile[row]
+        position.setY(i, y + 0.002) // clear of the ground
+        position.setZ(i, z)
+        uvs.setY(i, 1 - along[row] / LENGTH)
+      }
+      sweepGeometry.computeVertexNormals()
+
+      // The paint, baked once: broad clouds of tone, smaller blotches and the cloth's tooth, with metres as units.
+      const paintTarget = new THREE.RenderTarget(4096, 2048, {
+        depthBuffer: false,
+        generateMipmaps: true,
+        minFilter: THREE.LinearMipmapLinearFilter,
+        anisotropy: 8,
+      })
+      paintTarget.texture.name = 'muslin paint'
+      {
+        const p = uv().mul(vec2(SWEEP.width, LENGTH))
+        const clouds = mx_fractal_noise_float(vec3(p.mul(0.16), 4.7), 5, 2, 0.55)
+        const blotches = mx_fractal_noise_float(vec3(p.mul(0.8), 9.3), 3, 2, 0.5)
+        const tooth = mx_noise_float(vec3(p.mul(45), 2.2))
+        const shade = clouds.mul(0.38).add(blotches.mul(0.1)).add(tooth.mul(0.035)).add(0.5).saturate()
+        const quad = new THREE.QuadMesh(new THREE.MeshBasicNodeMaterial({ name: 'muslin paint', fragmentNode: vec4(shade, 0, 0, 1) }))
+        renderer.setRenderTarget(paintTarget)
+        quad.render(renderer)
+        renderer.setRenderTarget(null)
+        quad.material.dispose()
+      }
+      const muslin = new THREE.MeshStandardNodeMaterial({ name: 'sweep', roughness: 0.92 })
+      muslin.colorNode = mix(color('#a1a9b2'), color('#d3d8dd'), smoothstep(0.08, 0.92, texture(paintTarget.texture).r))
+      const sweep = new THREE.Mesh(sweepGeometry, muslin)
+      sweep.name = 'sweep'
+      scene.add(sweep)
+
+      // ---- The light: one softbox, aimed at the set's middle from a few metres out ----
+
+      const TARGET = new THREE.Vector3(0, 1, 0)
+      const DISTANCE = 4
+
+      const light = new THREE.RectAreaLight('#fff4e8', params.power / (params.width * params.height), params.width, params.height)
+      scene.add(light)
+
+      // Its face, glowing on the side it shines from, its −z, and dark on the back.
+      const faceMaterial = new THREE.MeshBasicNodeMaterial({ name: 'softbox face', side: THREE.DoubleSide })
+      faceMaterial.colorNode = frontFacing.select(materialColor, color('#111'))
+      const face = new THREE.Mesh(new THREE.PlaneGeometry(), faceMaterial)
+      face.rotation.y = Math.PI // facing −z
+      light.add(face)
+
+      function sizeLight() {
+        light.width = params.width
+        light.height = params.height
+        light.intensity = params.power / (params.width * params.height) // the same power, spread over the face
+        face.scale.set(params.width, params.height, 1)
+        faceMaterial.color.copy(light.color).multiplyScalar(light.intensity)
+      }
+
+      function placeLight() {
+        const elevation = THREE.MathUtils.degToRad(params.elevation)
+        const azimuth = THREE.MathUtils.degToRad(params.azimuth)
+        light.position.set(Math.sin(azimuth) * Math.cos(elevation), Math.sin(elevation), Math.cos(azimuth) * Math.cos(elevation))
+        light.position.multiplyScalar(DISTANCE).add(TARGET)
+        light.lookAt(TARGET)
+      }
+      sizeLight()
+      placeLight()
+
+      // ---- What casts: a runner sprinting in place, a knot spinning, a box bobbing and a pillar at rest ----
+
+      const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder)
+      const runnerGLTF = await loading.track((onProgress) => loader.loadAsync('../motion-blur/models/runner.glb', onProgress))
+
+      const runnerBody = new THREE.MeshStandardNodeMaterial({ name: 'runner body', color: '#14566a', roughness: 0.4 })
+      const runnerJoints = new THREE.MeshStandardNodeMaterial({ name: 'runner joints', color: '#1f2b2d', roughness: 0.5 })
+      const runner = runnerGLTF.scene
+      runner.rotation.y = Math.PI / 2 // running to the right, side on
+      runner.traverse((child) => {
+        if (!child.isSkinnedMesh) return
+        child.material = child.name.includes('joints') ? runnerJoints : runnerBody
+        child.castShadow = true
+        child.boundingSphere = new THREE.Sphere(new THREE.Vector3(-0.06, 0.84, -0.11), 1.02) // holds every pose of the run
+      })
+      scene.add(runner)
+      const mixer = new THREE.AnimationMixer(runner)
+      mixer.clipAction(runnerGLTF.animations[0]).play() // "run", in place
+
+      const clay = new THREE.MeshStandardNodeMaterial({ name: 'clay', color: '#d9d4cc', roughness: 0.55 })
+
+      const knot = new THREE.Mesh(new THREE.TorusKnotGeometry(0.25, 0.1, 150, 40), clay)
+      knot.position.set(-1.2, 0.6, 1.2)
+
+      // Its lowest corner passes 2 cm over the floor, where its shadow is sharpest.
+      const BOX_HEIGHT = 0.755
+      const box = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), clay)
+      box.position.set(1.2, BOX_HEIGHT, 1.2)
+      box.rotation.set(90, 90, 90) // radians: a corner down
+
+      const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2, 0.2), clay)
+      pillar.position.set(0, 1, -1.5)
+
+      for (const prop of [knot, box, pillar]) {
+        prop.castShadow = true
+        scene.add(prop)
+      }
+
+      // ---- The shadow: a screen-space mask the softbox multiplies by ----
+
+      const shadow = new RectAreaLightShadow(light, {
+        lightSamples: params.lightSamples,
+        resolutionScale: params.resolutionScale,
+        rayLength: 12, // the pillar's shadow runs up the wall; the march is clipped to the casters' boxes
+      })
+
+      const helper = new RectAreaLightShadowHelper(shadow) // the caster boxes and the shadow frustum
+      helper.visible = params.boxes
+      scene.add(helper)
+
+      // ---- Post-processing: TAAU, or a view of the shadow ----
+
+      const scenePass = pass(scene, camera, { samples: 0 }) // jittered for TAAU, without MSAA
+      scenePass.setMRT(mrt({ output, velocity }))
+      const velocityTexture = scenePass.getTexture('velocity') // RG16F
+      velocityTexture.type = THREE.HalfFloatType
+      velocityTexture.format = THREE.RGFormat
+      const taauNode = taau(scenePass.getTextureNode('output'), scenePass.getTextureNode('depth'), scenePass.getTextureNode('velocity'), camera)
+
+      const pipeline = new THREE.RenderPipeline(renderer)
+      pipeline.outputColorTransform = false
+      function setOutput() {
+        const beauty = params.view === 'beauty'
+        if (beauty) taauNode.resetHistory() // back in the output graph: its history is stale
+        pipeline.outputNode = beauty ? renderOutput(taauNode.getTextureNode()) : shadow.getDebugNode(params.view)
+        pipeline.needsUpdate = true
+      }
+      setOutput()
+
+      // The scene pass at renderPixelRatio, which TAAU upscales to the output's pixel ratio. The shadow mask, which the
+      // scene pass reads, sizes itself from the drawing buffer: its resolutionScale scales with the scene's.
+      const sceneScale = () => Math.min(1, params.renderPixelRatio / renderer.getPixelRatio())
+      function setSampling() {
+        const scale = sceneScale()
+        scenePass.setResolutionScale(scale)
+        shadow.resolutionScale = params.resolutionScale * scale
+      }
+      // The output's pixel ratio, and the scene's share of it: a move to another display changes the device's.
+      function setPixelRatio() {
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO))
+        setSampling()
+      }
+      setSampling()
+      window.addEventListener('resize', setPixelRatio)
+
+      // ---- GUI ----
+
+      const gui = new GUI({ title: 'Area light' })
+      if (window.innerWidth < 600) gui.close()
+      gui.add(params, 'shadow').onChange((value) => (shadow.enabled = value))
+      gui.add(params, 'width', 0.1, 4, 0.05).name('softbox width (m)').onChange(sizeLight)
+      gui.add(params, 'height', 0.1, 4, 0.05).name('softbox height (m)').onChange(sizeLight)
+      gui.add(params, 'orbit').name('orbit the set')
+      gui.add(params, 'view', ['beauty', ...RectAreaLightShadow.debugViews]).name('debug view').onChange(setOutput)
+      gui.add(params, 'boxes').name('caster boxes').onChange((value) => (helper.visible = value))
+      const lightFolder = gui.addFolder('Light').close()
+      lightFolder.add(params, 'power', 0, 600, 1).onChange(sizeLight)
+      lightFolder.add(params, 'azimuth', -180, 180, 1).name('azimuth (°)').listen().onChange(placeLight)
+      lightFolder.add(params, 'elevation', 10, 85, 1).name('elevation (°)').onChange(placeLight)
+      lightFolder.add(params, 'exposure', 0.2, 3, 0.01).onChange((value) => (renderer.toneMappingExposure = value))
+      const shadowFolder = gui.addFolder('Shadow').close()
+      shadowFolder.add(params, 'lightSamples', 1, 16, 1).name('light samples').onChange((value) => (shadow.lightSamples = value))
+      shadowFolder.add(params, 'resolutionScale', 0.25, 1, 0.25).name('resolution').onChange(setSampling) // of the scene's
+      shadowFolder.add(params, 'accumulation').onChange((value) => (shadow.temporalAccumulation = value))
+      const motion = gui.addFolder('Motion').close()
+      motion.add(params, 'pace', 0, 1.5, 0.01).name('runner pace')
+      motion.add(params, 'spin', -3, 3, 0.01).name('knot spin (rad/s)')
+      motion.add(params, 'bob', 0, 4, 0.01).name('box bob (rad/s)')
+      const resolutionFolder = gui.addFolder('Resolution').close()
+      resolutionFolder.add(params, 'renderPixelRatio', RENDER_PIXEL_RATIOS).name('render pixel ratio').onChange(setSampling)
+
+      // ---- Loop ----
+
+      await loading.stage('Compiling shaders…')
+      await shadow.compileAsync(renderer, scene, camera)
+      await scenePass.compileAsync(renderer)
+      await taauNode.compileAsync(renderer)
+
+      const timer = new THREE.Timer()
+      timer.connect(document)
+      let bob = 0
+      renderer.setAnimationLoop((time) => {
+        timer.update(time)
+        const delta = Math.min(timer.getDelta(), 1 / 20)
+        mixer.update(delta * params.pace)
+        knot.rotation.y += delta * params.spin
+        bob += delta * params.bob
+        box.position.y = BOX_HEIGHT + 0.4 * Math.sin(bob)
+        if (params.orbit) {
+          params.azimuth = THREE.MathUtils.euclideanModulo(params.azimuth + 180 + delta * 15, 360) - 180
+          placeLight()
+        }
+        controls.update(delta)
+        shadow.render(renderer, scene, camera) // after every pose, before the beauty: the mask is in screen space
+        if (helper.visible) helper.update()
+        if (params.view !== 'beauty') syncUnjitteredProjection(camera) // TAAU is out of the output graph
+        pipeline.render()
+        stats.update()
+        renderer.resolveTimestampsAsync('render')
+      })
+      loading.done()
+    </script>
+  </body>
+</html>

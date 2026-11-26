@@ -8,18 +8,27 @@
  *    texel is stored negative where the kernel should see a change: its surface is new to the history (an occluder
  *    moved in or out) or, with a velocity node, its whole footprint moves on its own. With a velocity node it also
  *    writes the footprint's object motion (RG16F).
- * 2. AO: 2 slices × 3 steps per side. The slice rotation and step jitter come from a 4×4 tile, a 16-point lattice
- *    ranked by a Bayer matrix, so any 4×4 block of pixels holds all 16 combinations. Writes the AO and the view
- *    distance (RG16F), the distance negative when a tap landed on a marked texel. Background pixels and pixels past
- *    `fadeEnd` skip the march.
- * 3. Denoise: a 4×4 box matched to the tile (8 gathers), each tap weighted by how well its depth fits the center's
+ * 2. Change mask, with temporal accumulation: per 4×4 tile of AO texels, whether the prefilter marked any, dilated
+ *    along x then y by the kernel's reach at the tile's closest distance (three passes at 1/16 of the AO texels,
+ *    RG16F). It marks the same tiles every frame while the same things move, so what it drives doesn't speckle.
+ * 3. AO: 2 slices × 3 steps per side. The slice rotation and step jitter come from a 4×4 tile, a 16-point lattice
+ *    ranked so that any 4×4 block of pixels holds all 16 combinations and its lines and 2×2 blocks an even spread of
+ *    them. A fresh tile, under the change mask or where last frame's history was short, adds a slice and holds the
+ *    tile still instead of shifting it every frame: with little history to average the shifts over, they would only
+ *    flicker. Writes the AO and the view distance (RG16F). Background pixels and pixels past `fadeEnd` skip the march.
+ * 4. Denoise: a 4×4 box matched to the tile (8 gathers), each tap weighted by how well its depth fits the center's
  *    plane. On open surfaces it averages exactly the 16 combinations, so the noise cancels.
- * 4. Accumulate, in the denoise pass: the tile moves every frame, so the taps land at new distances, and the box's
+ * 5. Accumulate, in the denoise pass: the tile moves every frame, so the taps land at new distances, and the box's
  *    result blends over the history reprojected through the camera (and along the motion vectors, with a velocity
  *    node). The history (RGBA16F: AO, distance, length, variance) is clamped to a variance band around the box's mean;
- *    its length shrinks where it strays past that band, where the view moves fast and where a tap saw a marked texel,
- *    and texels off the point's surface are dropped. Two targets alternate, so nothing is copied.
- * 5. Upsample, in the consumer's shader: a 2×2 joint bilateral upsample (two gathers and a depth compare).
+ *    its length shrinks where it strays past that band, where the view moves fast and under the change mask, and
+ *    texels off the point's surface are dropped. Two result targets alternate as result and history.
+ * 6. History fix: where the history is shorter than `historyFixLength`, the box's leftover dither at creases would
+ *    crawl as the tile moves. A wider blur covers it: 5×5 taps (9 gathers) weighted [1 2 2 2 1] per axis, so whole
+ *    tiles still cancel, each also weighted by its fit to the center's plane and by how close its AO is to the
+ *    center's, so contact shadows and grooves stay sharp. It fades out as the history grows, and its output is the
+ *    history.
+ * 7. Upsample, in the consumer's shader: a 2×2 joint bilateral upsample (two gathers and a depth compare).
  *
  * As a post effect:
  *
@@ -43,17 +52,21 @@
  *   const aoPass = xeGTAO(prePass.getTextureNode('depth'), camera)
  *   scenePass.contextNode = builtinAOContext(aoPass.getMaterialAONode())
  *
- * `normalNode`, `velocityNode`, `sliceCount`, `stepsPerSlice` and `resolutionScale` are baked into the shaders and
- * rebuild them on the next frame when changed; the switches route at render time; every other setting is a uniform.
+ * `normalNode`, `velocityNode`, `sliceCount`, `motionSliceCount`, `stepsPerSlice` and `resolutionScale` are baked into
+ * the shaders and rebuild them on the next frame when changed; the switches route at render time; every other setting
+ * is a uniform.
  *
  * References:
  * - https://github.com/GameTechDev/XeGTAO (XeGTAO.hlsli, XeGTAO.h)
  * - Practical Realtime Strategies for Accurate Indirect Occlusion (Activision): the 4×4 tile and matched blur
  * - Spatiotemporal Variance-Guided Filtering (Schied et al.): the history length and the variance band
+ * - ReBLUR (NVIDIA Real-Time Denoisers): the history fix
+ * - Stable SSAO in Battlefield 3 with Selective Temporal Filtering (Bavoil, GDC 2012): the dilated change mask
  */
 import {
   FloatType,
   HalfFloatType,
+  LinearFilter,
   Matrix4,
   NearestFilter,
   NearestMipmapNearestFilter,
@@ -70,6 +83,7 @@ import {
 } from 'three/webgpu'
 import {
   abs,
+  ceil,
   clamp,
   context,
   cos,
@@ -81,9 +95,10 @@ import {
   Fn,
   HALF_PI,
   If,
-  ivec2,
+  int,
   length,
   logarithmicDepthToViewZ,
+  Loop,
   max,
   min,
   mix,
@@ -109,13 +124,15 @@ import {
   sqrt,
   step,
   texture,
+  uint,
   uniform,
   uv,
+  uvec2,
   vec2,
   vec3,
   vec4,
 } from 'three/tsl'
-import { compileQuad } from './utils/compileQuad.js'
+import { compileQuad } from '../../utils/compileQuad.js'
 
 const _quadMesh = /* @__PURE__ */ new QuadMesh()
 const _size = /* @__PURE__ */ new Vector2()
@@ -151,6 +168,12 @@ const SETTINGS = {
   sampleDistributionPower: 2,
   // × view distance: how far a denoise tap may sit off the center's plane
   denoiseTolerance: 0.011,
+  // with historyFix, the history length under which the result blurs wider: in full at 1 frame, gone from this length
+  historyFixLength: 4,
+  // with historyFix, × view distance: how far a tap of the wider blur may sit off the center's plane
+  historyFixTolerance: 0.004,
+  // with historyFix, the AO difference from the center at which a tap of the wider blur stops counting (0: any)
+  historyFixRange: 0.2,
   // × view distance: how far an AO texel's depth may be from the pixel's in the upsample
   upsampleTolerance: 0.02,
   // the current frame's weight over a full history, 1 / its longest length: lower is smoother and slower to settle
@@ -169,7 +192,7 @@ const SETTINGS = {
   changeTolerance: 0.01,
   // with a velocity node, drawing-buffer px per frame (at least 0.05): object motion below it counts as still
   motionThreshold: 0.5,
-  // the current frame's weight where a tap of the box saw a marked texel
+  // the current frame's weight under the change mask, where an occluder moved within the kernel's reach
   motionAccumulationAlpha: 0.8,
   // with motion vectors, the same where few of the box's kernel reads did (a thin occluder moving through)...
   sparseMotionAccumulationAlpha: 0.25,
@@ -181,12 +204,14 @@ const OPTIONS = [
   'normalNode',
   'velocityNode',
   'sliceCount',
+  'motionSliceCount',
   'stepsPerSlice',
   'resolutionScale',
   'denoise',
   'temporalAccumulation',
   'changeDetection',
   'motionVectors',
+  'historyFix',
   ...Object.keys(SETTINGS),
 ]
 
@@ -200,17 +225,18 @@ function fastAcos(x) {
   return x.greaterThanEqual(0).select(res, PI.sub(res))
 }
 
-// The pixel's rank in a 4×4 Bayer matrix: neighbours get ranks far apart.
-function bayer4(pixel) {
-  const x = pixel.x.bitAnd(3)
-  const y = pixel.y.bitAnd(3)
-  const xy = x.bitXor(y)
-  return xy
-    .bitAnd(1)
-    .shiftLeft(3)
-    .bitOr(y.bitAnd(1).shiftLeft(2))
-    .bitOr(xy.shiftRight(1).bitAnd(1).shiftLeft(1))
-    .bitOr(y.shiftRight(1).bitAnd(1))
+// The 4×4 tile's ranks, row by row in two words of 8 nibbles. As in a Bayer matrix, any 4×4 block holds all 16; beyond
+// one, each diagonal of the tile holds all four quarters of the slice rotations and of the step jitter, and each row,
+// column and 2×2 block at least three, so an edge or a crease through the denoise box leaves less of the dither.
+const _tile = [0xefa5381c, 0x2d6794b0]
+
+// The pixel's rank in the 4×4 tile.
+function tileRank(pixel) {
+  const p = uvec2(pixel)
+  const x = p.x.bitAnd(3)
+  const y = p.y.bitAnd(3)
+  const word = select(y.lessThan(2), uint(_tile[0]), uint(_tile[1]))
+  return int(word.shiftRight(x.add(y.bitAnd(1).mul(4)).mul(4)).bitAnd(15))
 }
 
 // Point-sampled with NearestMipmapNearest, not Nearest: three then samples through a sampler instead of turning every
@@ -328,9 +354,15 @@ class XeGTAONode extends Node {
    * occluder in the kernel's footprint moves. Off, the camera alone reprojects; the passes still read the velocity.
    */
   motionVectors = true
+  /**
+   * Blurs the result wider where its history is short, in one more pass, so a moved occluder's noise doesn't crawl
+   * while the history rebuilds. Off saves the pass.
+   */
+  historyFix = true
 
   #u = Object.fromEntries(Object.entries(SETTINGS).map(([name, value]) => [name, uniform(value)]))
   #normalNode = null
+  #motionSliceCount = null
   #velocityNode = null
   #camera
   #cameraNear
@@ -339,6 +371,8 @@ class XeGTAONode extends Node {
   #depthTarget
   #rawTarget
   #resultTargets
+  #accumulateTarget
+  #maskTargets
   #materials
   #resultTexNode
   #historyTexNode
@@ -360,10 +394,12 @@ class XeGTAONode extends Node {
   #historyValidU = uniform(0) // 1 when the other result target holds the history
   #changeValidU = uniform(0) // 1 when the prefilter compares depths against the history
   #motionVectorsU = uniform(1)
+  #temporalU = uniform(0) // 1 with temporal accumulation
   #tileOffsetU = uniform(new Vector2()) // this frame's shift of the tile's lattice
   #reprojectionU = uniform(new Matrix4()) // view space → the previous frame's clip space
   #resolutionU = uniform(new Vector2(1, 1)) // AO px
   #texelU = uniform(new Vector2(1, 1)) // 1 / AO px
+  #tileResolutionU = uniform(new Vector2(1, 1)) // the change mask's size: one texel per 4×4 AO px
   #fullResolutionU = uniform(new Vector2(1, 1)) // drawing-buffer px
   #resRatioU = uniform(1) // AO height / drawing-buffer height
   #projScaleU = uniform(1) // AO px per view unit at distance 1
@@ -396,16 +432,26 @@ class XeGTAONode extends Node {
     this.#createTargets()
     // AO, view distance, history length, variance: with temporal accumulation they alternate, the other the history
     this.#resultTargets = [0, 1].map((i) => createTarget(`XeGTAO.Result${i}`, RGBAFormat, HalfFloatType))
+    // with the history fix, the accumulated result it reads
+    this.#accumulateTarget = createTarget('XeGTAO.Accumulate', RGBAFormat, HalfFloatType)
+    // the change mask per 4×4 tile (moved, closest distance), and its dilation along x; the accumulation reads the
+    // first bilinearly, so its edges ramp over a tile
+    this.#maskTargets = [0, 1].map((i) => createTarget(`XeGTAO.Change${i}`, RGFormat, HalfFloatType))
+    this.#maskTargets[0].texture.minFilter = this.#maskTargets[0].texture.magFilter = LinearFilter
 
     // The quads render inside the consumer's pass and inherit its context: keep its getAO out of them.
     const contextNode = context({ getAO: null })
     const material = (name) => Object.assign(new NodeMaterial(), { name, contextNode })
     this.#materials = {
       prefilter: material('XeGTAO.Prefilter'),
+      change: material('XeGTAO.Change'),
+      dilateX: material('XeGTAO.ChangeDilateX'),
+      dilateY: material('XeGTAO.ChangeDilateY'),
       ao: material('XeGTAO'),
       denoise: material('XeGTAO.Denoise'),
       copy: material('XeGTAO.Copy'),
       accumulate: material('XeGTAO.DenoiseAccumulate'),
+      historyFix: material('XeGTAO.HistoryFix'),
     }
 
     this.#resultTexNode = passTexture(this, this.#resultTargets[0].texture)
@@ -420,6 +466,18 @@ class XeGTAONode extends Node {
   }
   set normalNode(value) {
     this.#normalNode = value ? nodeObject(value) : null
+  }
+
+  /**
+   * Horizon slices per pixel in a fresh tile, where an occluder moved within reach or last frame's history was short,
+   * so the denoise has little history to hide the noise with; sliceCount or less adds none. Null: sliceCount + 1.
+   * Rebuilds the shaders on change.
+   */
+  get motionSliceCount() {
+    return this.#motionSliceCount ?? this.sliceCount + 1
+  }
+  set motionSliceCount(value) {
+    this.#motionSliceCount = value
   }
 
   /** The scene pass's velocity texture node, or null for the camera's motion alone. Rebuilds the shaders on change. */
@@ -467,7 +525,9 @@ class XeGTAONode extends Node {
     this.#texelU.value.set(1 / w, 1 / h)
     this.#fullResolutionU.value.set(width, height)
     this.#resRatioU.value = h / height
-    for (const target of [this.#depthTarget, this.#rawTarget, ...this.#resultTargets]) target.setSize(w, h)
+    for (const target of this.#targets()) target.setSize(w, h)
+    const tiles = this.#tileResolutionU.value.set(Math.ceil(w / 4), Math.ceil(h / 4))
+    for (const target of this.#maskTargets) target.setSize(tiles.x, tiles.y)
   }
 
   /** Drops the history, e.g. after a camera cut. */
@@ -529,6 +589,7 @@ class XeGTAONode extends Node {
     this.#historyValidU.value = valid
     this.#changeValidU.value = this.changeDetection ? valid : 0
     this.#motionVectorsU.value = temporal && this.motionVectors ? 1 : 0
+    this.#temporalU.value = temporal ? 1 : 0
     if (temporal) {
       // whole lattice points cycle each pixel through all 16 combinations; the R2 shift changes which rotations and
       // distances they sample
@@ -573,7 +634,7 @@ class XeGTAONode extends Node {
     this.#disposed = true
     super.dispose()
     const free = () => {
-      for (const target of [this.#depthTarget, this.#rawTarget, ...this.#resultTargets]) target.dispose()
+      for (const target of [...this.#targets(), ...this.#maskTargets]) target.dispose()
       for (const material of Object.values(this.#materials)) material.dispose()
     }
     // a compile in flight would bind what is freed meanwhile
@@ -581,15 +642,24 @@ class XeGTAONode extends Node {
     else free()
   }
 
+  // The targets at AO resolution.
+  #targets() {
+    return [this.#depthTarget, this.#rawTarget, ...this.#resultTargets, this.#accumulateTarget]
+  }
+
   // The passes a frame renders under the current settings, each with its target.
   #passes() {
-    const { prefilter, ao, denoise, copy, accumulate } = this.#materials
+    const { prefilter, change, dilateX, dilateY, ao, denoise, copy, accumulate, historyFix } = this.#materials
     const temporal = this.denoise && this.temporalAccumulation
-    return [
-      [prefilter, this.#depthTarget],
-      [ao, this.#rawTarget],
-      [temporal ? accumulate : this.denoise ? denoise : copy, this.#resultTargets[this.#parity]],
-    ]
+    const result = this.#resultTargets[this.#parity]
+    const [mask, maskX] = this.#maskTargets
+    const passes = [[prefilter, this.#depthTarget]]
+    if (temporal) passes.push([change, mask], [dilateX, maskX], [dilateY, mask])
+    passes.push([ao, this.#rawTarget])
+    if (!temporal) passes.push([this.denoise ? denoise : copy, result])
+    else if (!this.historyFix) passes.push([accumulate, result])
+    else passes.push([accumulate, this.#accumulateTarget], [historyFix, result])
+    return passes
   }
 
   // What a compile covers: the shaders' structure and the last pass the switches pick.
@@ -607,7 +677,8 @@ class XeGTAONode extends Node {
   // What the shaders bake in.
   #structure() {
     const inputs = `${this.#normalNode?.id ?? '-'} ${this.#velocityNode?.id ?? '-'}`
-    return `${this.sliceCount}×${this.stepsPerSlice} ${this.resolutionScale === 1} ${this.#logarithmicDepth} ${inputs}`
+    const slices = `${this.sliceCount}+${this.motionSliceCount}×${this.stepsPerSlice}`
+    return `${slices} ${this.resolutionScale === 1} ${this.#logarithmicDepth} ${inputs}`
   }
 
   // The prefilter's and the AO pass's targets: with a velocity node, each carries a second texture.
@@ -648,10 +719,14 @@ class XeGTAONode extends Node {
     }
     const raw = texture(this.#rawTarget.texture).sample(uv()).level(0)
     set(this.#materials.prefilter, this.#prefilterFn()(), this.#prefilterOutputs)
+    set(this.#materials.change, this.#changeFn()())
+    set(this.#materials.dilateX, this.#dilateFn(this.#maskTargets[0], 'x')())
+    set(this.#materials.dilateY, this.#dilateFn(this.#maskTargets[1], 'y')())
     set(this.#materials.ao, this.#aoFn()(), this.#aoOutputs)
     set(this.#materials.denoise, this.#denoiseFn()())
     set(this.#materials.copy, vec4(raw.x, abs(raw.y), 1, 0))
     set(this.#materials.accumulate, this.#accumulateFn()())
+    set(this.#materials.historyFix, this.#historyFixFn()())
   }
 
   // The positive view distance at `uvCoord`, from the depth node.
@@ -753,6 +828,62 @@ class XeGTAONode extends Node {
     return error.greaterThan(tolerance).and(onScreen(camera.uv, camera.w)).and(this.#changeValidU.greaterThan(0.5))
   }
 
+  // Per 4×4 tile of AO texels, aligned to the AO pass's tile: 1 where the prefilter marked any of them, and their
+  // closest view distance.
+  #changeFn() {
+    const depthTex = texture(this.#depthTarget.texture)
+    return Fn(() => {
+      const base = floor(uv().mul(this.#tileResolutionU)).mul(4).toVar()
+      const lowest = float(_background).toVar()
+      const closest = float(_background).toVar()
+      for (let y = 0; y < 4; y++) {
+        for (let x = 0; x < 4; x++) {
+          const value = depthTex.sample(base.add(vec2(x + 0.5, y + 0.5)).mul(this.#texelU)).level(0).r
+          lowest.assign(min(lowest, value))
+          closest.assign(min(closest, abs(value)))
+        }
+      }
+      return vec4(select(lowest.lessThan(0), float(1), float(0)), closest, 0, 1)
+    })
+  }
+
+  // The change mask dilated along one axis by the kernel's reach, in tiles, at each tile's closest distance: run along
+  // x then y, a tile is set where a marked tile lies within the radius of any of its pixels. Unlike the kernel's own
+  // taps, which land somewhere new every frame, it sets the same tiles while the same things move.
+  #dilateFn(source, axis) {
+    const u = this.#u
+    const tex = texture(source.texture)
+    const tileStep = vec2(axis === 'x' ? 1 : 0, axis === 'y' ? 1 : 0).div(this.#tileResolutionU)
+    return Fn(() => {
+      const vuv = uv()
+      const center = tex.sample(vuv).level(0).toVar()
+      const maxRadius = max(u.maxScreenRadius.mul(this.#resRatioU), 0.5)
+      const screenRadius = clamp(u.radius.mul(this.#projScaleU).div(max(center.y, 1e-6)), 0.5, maxRadius)
+      // a pixel sits up to 3 px from its tile's far edge
+      const reach = int(ceil(screenRadius.add(3).div(4))).toVar()
+      const moved = center.x.toVar()
+      Loop({ start: reach.negate(), end: reach, type: 'int', condition: '<=' }, ({ i }) => {
+        moved.assign(max(moved, tex.sample(vuv.add(tileStep.mul(float(i)))).level(0).x))
+      })
+      return vec4(moved, center.y, 0, 1)
+    })
+  }
+
+  // Whether last frame's history at this point was short: none, or no longer than a marked texel's and the frame after
+  // it. Read through the camera, then along the prefilter's object motion with a velocity node.
+  #shortHistory(vuv, dist) {
+    const u = this.#u
+    const camera = this.#cameraReprojection(vuv, dist)
+    const previousUV = this.#motionTexNode
+      ? camera.uv.add(this.#motionTexNode.sample(vuv).level(0).xy.mul(this.#texelU))
+      : camera.uv
+    const historyLength = this.#historyTexNode.sample(previousUV).level(0).z
+    const fullLength = float(1).div(max(u.temporalAccumulationAlpha, 1e-3))
+    const markedLength = min(float(1).div(max(u.motionAccumulationAlpha, 1e-3)), fullLength)
+    const short = this.#historyValidU.lessThan(0.5).or(historyLength.lessThanEqual(markedLength.add(1)))
+    return short.and(this.#temporalU.greaterThan(0.5))
+  }
+
   #aoFn() {
     const { sliceCount, stepsPerSlice } = this
     const u = this.#u
@@ -760,6 +891,7 @@ class XeGTAONode extends Node {
     const ndcScale = this.#ndcScaleU
     const projScale = this.#projScaleU
     const depthTex = texture(this.#depthTarget.texture)
+    const maskTex = texture(this.#maskTargets[0].texture)
     // the prefilter's sign marks changed texels: distances are its magnitude
     const valueAt = (uvCoord) => depthTex.sample(uvCoord).level(0).r
     // view position from uv and view distance, for a symmetric projection: 2 mads instead of a matrix per tap
@@ -772,8 +904,6 @@ class XeGTAONode extends Node {
       const vuv = uv()
       const centerValue = valueAt(vuv).toVar()
       const dist = abs(centerValue).toVar()
-      // the lowest signed distance the kernel reads: negative when a marked texel lies in its footprint
-      const lowest = centerValue.toVar()
       // with a velocity node, how many of its reads are marked
       const markedReads = this.velocityNode ? select(centerValue.lessThan(0), float(1), float(0)).toVar() : null
 
@@ -797,7 +927,6 @@ class XeGTAONode extends Node {
         const distR = abs(valueR)
         const distT = abs(valueT)
         const distB = abs(valueB)
-        lowest.assign(min(lowest, min(min(valueL, valueR), min(valueT, valueB))))
         markedReads?.addAssign(float(4).sub(dot(step(vec4(0), vec4(valueL, valueR, valueT, valueB)), vec4(1))))
 
         // view-space normal: sampled if given, else XeGTAO's edge-weighted blend of the 4 quadrants' cross products
@@ -839,15 +968,27 @@ class XeGTAONode extends Node {
         const centerPos = viewPosAt(vuv, marchDist).toVar()
         const viewVec = normalize(centerPos.negate()).toVar()
 
-        // the 4×4 tile: point bayer4(pixel) of the lattice (i, 5i mod 16) / 16, which takes all 16 values on both axes
-        // and fills every cell of a 4×4 grid; x rotates the slices, y jitters the steps. The frame's offset moves the
-        // whole lattice, so any 4×4 block still holds one shifted copy of it.
-        const rank = bayer4(ivec2(screenCoordinate.xy)).toVar()
+        // fresh: an occluder moved within reach (the change mask) or last frame's history was short, so the frame has
+        // little history to blend with. Decided per 4×4 tile, so the denoise box sees one pattern and one slice count.
+        const tile = floor(screenCoordinate.xy.div(4)).toVar()
+        const tileMask = maskTex.sample(tile.add(0.5).div(this.#tileResolutionU)).level(0)
+        const tileCenter = tile.mul(4).add(2).mul(texel)
+        const fresh = tileMask.x
+          .greaterThan(0.5)
+          .and(this.#temporalU.greaterThan(0.5))
+          .or(this.#shortHistory(tileCenter, tileMask.y))
+          .toVar()
+
+        // the 4×4 tile: point tileRank(pixel) of the lattice (i, 5i mod 16) / 16, which takes all 16 values on both
+        // axes and fills every cell of a 4×4 grid; x rotates the slices, y jitters the steps. The frame's offset moves
+        // the whole lattice, so any 4×4 block still holds one shifted copy of it. A fresh tile holds still: with no
+        // history to average its shifts over, they would only flicker.
+        const rank = tileRank(screenCoordinate.xy).toVar()
         const noise = fract(
           vec2(float(rank), float(rank.mul(5).bitAnd(15)))
             .add(0.5)
             .div(16)
-            .add(this.#tileOffsetU),
+            .add(select(fresh, vec2(0), this.#tileOffsetU)),
         ).toVar()
 
         // the world radius in AO px, capped in drawing-buffer px; the falloff uses the radius the cap left
@@ -863,11 +1004,17 @@ class XeGTAONode extends Node {
         const minS = float(_pixelTooCloseThreshold).div(screenRadius).toVar()
         const thinScale = vec3(1, 1, u.thinOccluder.add(1)).toVar()
 
-        // sub-pixel radii can't resolve: fade toward unoccluded
-        const visibility = saturate(float(10).sub(screenRadius).div(100)).mul(0.5).toVar()
+        // more slices in a fresh tile: the denoise has little history there to hide the noise with
+        const extraSlices = Math.max(this.motionSliceCount - sliceCount, 0)
+        const slices = float(sliceCount).toVar()
+        if (extraSlices > 0) slices.assign(select(fresh, float(sliceCount + extraSlices), float(sliceCount)))
 
-        for (let slice = 0; slice < sliceCount; slice++) {
-          const phi = float(slice).add(noise.x).div(sliceCount).mul(PI)
+        // sub-pixel radii can't resolve: fade toward unoccluded
+        const visibility = saturate(float(10).sub(screenRadius).div(100)).mul(0.5).div(sliceCount).toVar()
+
+        // a slice's share of the visibility: the slices' rotations spread evenly over half a turn
+        const slice = (index) => {
+          const phi = float(index).add(noise.x).div(slices).mul(PI)
           const cosPhi = cos(phi).toVar()
           const sinPhi = sin(phi).toVar()
 
@@ -894,7 +1041,7 @@ class XeGTAONode extends Node {
 
           for (let step = 0; step < stepsPerSlice; step++) {
             // the R1 sequence spreads the jitter across slices and steps
-            const stepNoise = fract(noise.y.add((slice + step * stepsPerSlice) * _goldenRatio))
+            const stepNoise = fract(noise.y.add((index + step * stepsPerSlice) * _goldenRatio))
             const s = float(step).add(stepNoise).div(stepsPerSlice).pow(u.sampleDistributionPower).add(minS)
 
             // snapped to texel centers, so the fetched depth matches the offset
@@ -906,7 +1053,6 @@ class XeGTAONode extends Node {
             ]) {
               const sampleUV = vuv.add(offset.mul(side))
               const sampleValue = valueAt(sampleUV).toVar()
-              lowest.assign(min(lowest, sampleValue))
               markedReads?.addAssign(select(sampleValue.lessThan(0), float(1), float(0)))
               const delta = viewPosAt(sampleUV, abs(sampleValue)).sub(centerPos).toVar()
               const deltaLen = length(delta)
@@ -923,19 +1069,23 @@ class XeGTAONode extends Node {
           const h1 = fastAcos(horizonCos0)
           const arc0 = cosNorm.add(h0.mul(2).mul(sinN)).sub(cos(h0.mul(2).sub(n)))
           const arc1 = cosNorm.add(h1.mul(2).mul(sinN)).sub(cos(h1.mul(2).sub(n)))
-          visibility.addAssign(projNormalLen.mul(arc0.add(arc1)).mul(0.25))
+          return projNormalLen.mul(arc0.add(arc1)).mul(0.25).div(slices)
+        }
+        for (let index = 0; index < sliceCount; index++) visibility.addAssign(slice(index))
+        if (extraSlices > 0) {
+          If(fresh, () => {
+            for (let index = sliceCount; index < sliceCount + extraSlices; index++) visibility.addAssign(slice(index))
+          })
         }
 
         // pow of the unclamped integral: its noise overshoot past 1 averages back out in the denoise
-        const shaped = max(pow(max(visibility.div(sliceCount), 0), u.power), 0.03)
+        const shaped = max(pow(max(visibility, 0), u.power), 0.03)
 
         // distance fade, then intensity: both affine in the AO, so they survive the averaging after
         const faded = mix(shaped, float(1), smoothstep(u.fadeStart, u.fadeEnd, dist))
         result.x.assign(mix(float(1), faded, u.intensity))
-        // the marked-footprint flag rides on the distance's sign
-        result.y.assign(dist.mul(step(0, lowest).mul(2).sub(1)))
         // the center, its 4 neighbours and 2 taps per step
-        if (markedReads) result.z.assign(markedReads.div(5 + 2 * sliceCount * stepsPerSlice))
+        if (markedReads) result.z.assign(markedReads.div(slices.mul(2 * stepsPerSlice).add(5)))
       })
 
       if (this.#aoOutputs) {
@@ -949,15 +1099,14 @@ class XeGTAONode extends Node {
 
   // The 4×4 box matched to the tile, from 8 gathers: the taps [-1, 2]² around the texel, each weighted by how far its
   // depth sits off the center's plane, so the cancellation stays exact on open surfaces. Returns the weighted sums of
-  // the AO and of its square, the center's depth and plane slopes, and whether a tap saw a marked texel; with
-  // `withShare`, also the mean share of the taps' kernel reads that did (4 more gathers).
+  // the AO and of its square, and the center's depth and plane slopes; with `withShare`, also the mean share of the
+  // taps' kernel reads that landed on a marked texel (4 more gathers).
   #box(vuv, withShare = false) {
     const aoTex = texture(this.#rawTarget.texture)
     const shareTex = withShare ? texture(this.#rawTarget.textures[1]) : null
     const tolerance = this.#u.denoiseTolerance
 
     const taps = new Map()
-    let lowest = null
     let shares = null
     for (const [bx, by] of [
       [-1, -1],
@@ -967,10 +1116,7 @@ class XeGTAONode extends Node {
     ]) {
       const corner = vuv.add(vec2(bx + 0.5, by + 0.5).mul(this.#texelU))
       const ao = aoTex.sample(corner).gather(0).toVar()
-      const signed = aoTex.sample(corner).gather(1).toVar()
-      const z = abs(signed).toVar()
-      const blockLowest = min(min(signed.x, signed.y), min(signed.z, signed.w))
-      lowest = lowest ? min(lowest, blockLowest) : blockLowest
+      const z = aoTex.sample(corner).gather(1).toVar()
       if (shareTex) {
         const blockShares = dot(shareTex.sample(corner).gather(0), vec4(1))
         shares = shares ? shares.add(blockShares) : blockShares
@@ -998,7 +1144,7 @@ class XeGTAONode extends Node {
     }
     // the center always weighs 1, so the sums can't vanish
     const share = shares ? shares.div(16).toVar() : null
-    return { center, gx, gy, sum, sumSq, sumWeight, marked: lowest.lessThan(0), share }
+    return { center, gx, gy, sum, sumSq, sumWeight, share }
   }
 
   #denoiseFn() {
@@ -1011,14 +1157,17 @@ class XeGTAONode extends Node {
   // The box over the reprojected history, at 1 / the history's length. The history is clamped to the box's mean ±
   // historyClamp + historyClampDeviation × its temporal deviation (from the history's variance once 4 frames hold, from
   // the box's spread before). Its length grows by one a frame up to 1 / temporalAccumulationAlpha, and shrinks the
-  // further it strays past that band, the faster the reprojection moves, and to 1 / motionAccumulationAlpha where a tap
-  // of the box saw a marked texel (with motion vectors, eased toward 1 / sparseMotionAccumulationAlpha the fewer of the
-  // box's kernel reads did).
+  // further it strays past that band, the faster the reprojection moves, and to 1 / motionAccumulationAlpha where the
+  // change mask is set (with motion vectors, eased toward 1 / sparseMotionAccumulationAlpha the fewer of the box's
+  // kernel reads landed on a marked texel).
   #accumulateFn() {
     const u = this.#u
+    const maskTex = texture(this.#maskTargets[0].texture)
     return Fn(() => {
       const vuv = uv()
-      const { center, gx, gy, sum, sumSq, sumWeight, marked, share } = this.#box(vuv, this.velocityNode !== null)
+      const { center, gx, gy, sum, sumSq, sumWeight, share } = this.#box(vuv, this.velocityNode !== null)
+      // bilinear, so the cap ramps across the mask's edge tile instead of stepping
+      const moved = saturate(maskTex.sample(vuv).level(0).x.mul(2))
       const denoised = sum.div(sumWeight).toVar()
       const rawSigma = sqrt(max(sumSq.div(sumWeight).sub(denoised.mul(denoised)), 0))
 
@@ -1048,7 +1197,7 @@ class XeGTAONode extends Node {
       const markedLength = min(float(1).div(max(markedAlpha, 1e-3)), fullLength)
       // 1 / (1 + speed / historyMotionSpeed) of the full length: half of it at historyMotionSpeed px per frame
       const speed = history.offset.div(max(u.historyMotionSpeed.mul(this.#resRatioU), 1e-3))
-      const maxLength = min(select(marked, markedLength, fullLength), fullLength.div(speed.add(1)))
+      const maxLength = min(mix(fullLength, markedLength, moved), fullLength.div(speed.add(1)))
       const len = min(
         history.length
           .mul(history.confidence)
@@ -1063,6 +1212,62 @@ class XeGTAONode extends Node {
       const variance = weight.oneMinus().mul(history.variance.add(weight.mul(delta.mul(delta))))
       // a point on last frame's camera plane reprojects to NaN, which a weight of 0 would still carry
       return select(history.confidence.greaterThan(0), vec4(value, center, len, variance), vec4(denoised, center, 1, 0))
+    })
+  }
+
+  // Where the history is short, the accumulated result blurred over the taps [-2, 2]² (9 gathers over [-2, 3]²),
+  // weighted [1 2 2 2 1] per axis, [1 1 1 1] spread by [1 1], so whole tiles still cancel. Each tap also weighs by its
+  // fit to the center's plane, within historyFixTolerance, and by how close its AO is to the center's, within
+  // historyFixRange. Fades out by historyFixLength; the length and variance pass through.
+  #historyFixFn() {
+    const u = this.#u
+    const tex = texture(this.#accumulateTarget.texture)
+    const tolerance = u.historyFixTolerance
+    const axis = [1, 2, 2, 2, 1]
+    return Fn(() => {
+      const vuv = uv()
+      const result = tex.sample(vuv).level(0).toVar()
+      const strength = saturate(u.historyFixLength.sub(result.z).div(max(u.historyFixLength.sub(1), 1e-3))).toVar()
+      If(strength.greaterThan(0), () => {
+        const taps = new Map()
+        for (const by of [-2, 0, 2]) {
+          for (const bx of [-2, 0, 2]) {
+            const corner = vuv.add(vec2(bx + 0.5, by + 0.5).mul(this.#texelU))
+            const ao = tex.sample(corner).gather(0).toVar()
+            const z = tex.sample(corner).gather(1).toVar()
+            blockOffsets(bx, by).forEach(([dx, dy], i) => {
+              taps.set(`${dx},${dy}`, { dx, dy, ao: ao['xyzw'[i]], z: z['xyzw'[i]] })
+            })
+          }
+        }
+        const zAt = (dx, dy) => taps.get(`${dx},${dy}`).z
+        const center = zAt(0, 0).toVar()
+        const { gx, gy } = slopes(center, zAt, tolerance)
+        const scale = float(1)
+          .div(max(tolerance.mul(center), 1e-6))
+          .toVar()
+        const range = u.historyFixRange
+        const inverseRange = float(1).div(max(range, 1e-6)).toVar()
+        const sum = float(0).toVar()
+        const sumWeight = float(0).toVar()
+        for (const { dx, dy, ao, z } of taps.values()) {
+          if (dx > 2 || dy > 2) continue
+          const close = select(
+            range.greaterThan(0),
+            saturate(float(1).sub(abs(ao.sub(result.x)).mul(inverseRange))),
+            float(1),
+          )
+          const weight = tapWeight(dx, dy, z, center, gx, gy, scale)
+            .mul(close)
+            .mul(axis[dx + 2] * axis[dy + 2])
+            .toVar()
+          sum.addAssign(ao.mul(weight))
+          sumWeight.addAssign(weight)
+        }
+        // the center always weighs 4, so the sums can't vanish
+        result.x.assign(mix(result.x, sum.div(sumWeight), strength))
+      })
+      return result
     })
   }
 

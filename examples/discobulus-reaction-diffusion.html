@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#a9bdc5" />
+    <title>Discobolus — Gold Reaction Diffusion</title>
+    <!-- The downloads the load waits for, started at once rather than once the modules that fetch them have loaded -->
+    <link rel="preload" href="./discobulus-reaction-diffusion.bake" as="fetch" crossorigin />
+    <link rel="preload" href="./models/discobulus.glb" as="fetch" crossorigin />
+    <link rel="preload" href="./models/discobulus-isotropic.glb" as="fetch" crossorigin />
+    <style>
+      /* The backdrop as it renders, top to bottom, so the page matches it before the first frame */
+      html {
+        min-height: 100%;
+        background: #a9bdc5 linear-gradient(#98abb4, #bad5e2);
+      }
+
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+
+      /* Touches paint and turn the plinth, never scroll or zoom, and a held one erases: no selection, callout or
+         magnifier */
+      canvas {
+        display: block;
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+      }
+
+      /* The zoom buttons, placed beside their parts every frame: light frosted glass under a white glyph; in a close-up
+         its + turns to a ×. */
+      .zoom-button {
+        --size: 44px;
+        --ease: cubic-bezier(0.22, 1, 0.36, 1);
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 10;
+        display: grid;
+        place-items: center;
+        width: var(--size);
+        height: var(--size);
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.22);
+        backdrop-filter: blur(20px) saturate(180%) brightness(1.06);
+        -webkit-backdrop-filter: blur(20px) saturate(180%) brightness(1.06);
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 0.55),
+          inset 0 1px 0 rgba(255, 255, 255, 0.4),
+          0 6px 20px rgba(20, 28, 40, 0.12),
+          0 1px 2px rgba(20, 28, 40, 0.1);
+        color: #fff;
+        cursor: pointer;
+        opacity: 0;
+        pointer-events: none;
+        transition:
+          opacity 0.5s var(--ease),
+          background 0.35s var(--ease);
+        will-change: transform;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .zoom-button.shown {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .zoom-glyph {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 100%;
+        height: 100%;
+        transition: transform 0.3s var(--ease);
+      }
+      .zoom-glyph svg {
+        width: 16px;
+        height: 16px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        filter: drop-shadow(0 1px 1.5px rgba(30, 40, 50, 0.35));
+        transition: transform 0.6s var(--ease);
+      }
+      /* A ring breathing out from the circle while it waits */
+      .zoom-glyph::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7);
+        opacity: 0;
+        animation: zoom-ring 2.8s var(--ease) infinite;
+        pointer-events: none;
+      }
+      @keyframes zoom-ring {
+        0% { transform: scale(1); opacity: 0.6; }
+        70%, 100% { transform: scale(1.7); opacity: 0; }
+      }
+      .zoom-button.zoomed {
+        background: rgba(255, 255, 255, 0.3);
+      }
+      .zoom-button.zoomed .zoom-glyph svg {
+        transform: rotate(45deg);
+      }
+      .zoom-button.zoomed .zoom-glyph::after {
+        animation: none;
+      }
+      .zoom-button:active .zoom-glyph {
+        transform: scale(0.9);
+      }
+      .zoom-button:focus-visible {
+        outline: 2px solid rgba(255, 255, 255, 0.9);
+        outline-offset: 3px;
+      }
+      @media (hover: hover) {
+        .zoom-button:not(.zoomed):hover {
+          background: rgba(255, 255, 255, 0.36);
+        }
+        .zoom-button:hover .zoom-glyph::after {
+          animation: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .zoom-glyph::after {
+          animation: none;
+        }
+      }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.webgpu.js",
+          "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.webgpu.js",
+          "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.tsl.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/",
+          "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.21.0/dist/lil-gui.esm.js",
+          "stats-gl": "https://cdn.jsdelivr.net/npm/stats-gl@4.2.3/dist/main.js",
+          "three-mesh-bvh": "https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.9.15/build/index.module.js",
+          "meshoptimizer/encoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@1.2.0/meshopt_encoder.js"
+        }
+      }
+    </script>
+    <script src="../utils/loading.js"></script>
+  </head>
+  <body>
+    <loading-screen style="--background: #a9bdc5 linear-gradient(#98abb4, #bad5e2); --color: #33434b"></loading-screen>
+    <!-- The first of the page's three stages, while its modules download -->
+    <script>
+      document.querySelector('loading-screen').stage('Quarrying marble…')
+    </script>
+    <script type="module" src="./discobulus-reaction-diffusion.js"></script>
+  </body>
+</html>

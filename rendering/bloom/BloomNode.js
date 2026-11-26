@@ -47,7 +47,7 @@ import {
   vec3,
   vec4,
 } from 'three/tsl'
-import { compileQuad } from './utils/compileQuad.js'
+import { compileQuad } from '../../utils/compileQuad.js'
 
 const _quadMesh = new QuadMesh()
 const _size = new Vector2()

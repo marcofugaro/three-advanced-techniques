@@ -10,50 +10,61 @@
         margin: 0;
         height: 100%;
         overflow: hidden;
-        background: #07080c;
+        background: #a9b4bf;
       }
       canvas {
         display: block;
         touch-action: none;
       }
-      #hint {
-        position: fixed;
-        left: 50%;
-        bottom: 16px;
-        max-width: calc(100vw - 32px);
-        margin: 0;
-        padding: 6px 14px;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.08);
-        color: #aab0bd;
-        font: 12px/1.4 system-ui, sans-serif;
-        text-align: center;
-        transform: translateX(-50%);
-        pointer-events: none;
-      }
     </style>
-    <script src="../../utils/importmap.js"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.webgpu.js",
+          "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.webgpu.js",
+          "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.tsl.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/",
+          "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.21.0/dist/lil-gui.esm.js",
+          "stats-gl": "https://cdn.jsdelivr.net/npm/stats-gl@4.2.3/dist/main.js"
+        }
+      }
+    </script>
+    <script src="../../utils/loading.js"></script>
   </head>
   <body>
-    <p id="hint">Rods thinner than a pixel, upscaled and steady · drag to orbit</p>
+    <loading-screen style="--background: #a9b4bf; --color: #2c3138"></loading-screen>
     <script type="module">
       import * as THREE from 'three/webgpu'
-      import { mrt, output, pass, renderOutput, velocity } from 'three/tsl'
+      import { color, mix, mrt, mx_fractal_noise_float, mx_noise_float, output, pass, renderOutput, smoothstep, texture, uv, vec2, vec3, vec4, velocity } from 'three/tsl'
       import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+      import { SkyMesh } from 'three/addons/objects/SkyMesh.js'
+      import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
       import GUI from 'lil-gui'
       import Stats from 'stats-gl'
-      import { taau } from './TAAUNode.js'
+      import { syncUnjitteredProjection, taau } from './TAAUNode.js'
 
-      // ---- The stage the rendering examples share: a dark studio, a glossy floor, neon in three colours ----
+      // ---- A seamless backdrop in the sun: a pendulum wave on wires thinner than a pixel, a chrome sphere, a string sculpture ----
 
-      const NEON = ['#ff2e7e', '#25d9ff', '#ffaa2b'].map((hex) => new THREE.Color(hex))
-      const DARK = '#07080c'
+      const loading = document.querySelector('loading-screen')
 
-      const renderer = new THREE.WebGPURenderer({ antialias: true })
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+      const params = {
+        taau: true, // off, the scene renders at the output's resolution without MSAA: aliased
+        renderPixelRatio: 2, // TAAU's input, in pixels per CSS pixel: below the screen's, it upscales
+        swing: 1, // the pendulums' playback rate
+        spin: 0, // the sculpture's turn, in rad/s: its front and back rods cross each other's motion, which TAAU blurs
+        drift: 0, // the camera's sway, in OrbitControls' autoRotateSpeed
+        exposure: 0.62,
+        fov: 32,
+      }
+      const MAX_PIXEL_RATIO = 2 // the output's pixels per CSS pixel at most
+
+      const renderer = new THREE.WebGPURenderer({ antialias: false }) // TAAU anti-aliases
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO))
       renderer.setSize(window.innerWidth, window.innerHeight)
       renderer.toneMapping = THREE.AgXToneMapping
+      renderer.toneMappingExposure = params.exposure
       renderer.shadowMap.enabled = true
+      renderer.shadowMap.type = THREE.PCFShadowMap
       document.body.appendChild(renderer.domElement)
       await renderer.init()
 
@@ -62,64 +73,24 @@
       stats.init(renderer)
 
       const scene = new THREE.Scene()
-      scene.background = new THREE.Color(DARK)
-      scene.fog = new THREE.Fog(DARK, 10, 24)
+      scene.fog = new THREE.FogExp2('#c6d1dc', 0.006) // the haze toward the horizon
 
-      // The environment: a dark room under a neon tube in each colour, which the glossy surfaces reflect.
-      const studio = new THREE.Scene()
-      studio.add(
-        new THREE.Mesh(
-          new THREE.BoxGeometry(16, 8, 16),
-          new THREE.MeshBasicMaterial({ color: '#101218', side: THREE.BackSide }),
-        ),
-      )
-      for (const [i, color] of NEON.entries()) {
-        const tube = new THREE.Mesh(
-          new THREE.BoxGeometry(6, 0.25, 0.25),
-          new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(5) }),
-        )
-        tube.position.set(0, 3.5, (i - 1) * 2.5)
-        studio.add(tube)
-      }
-      const pmrem = new THREE.PMREMGenerator(renderer)
-      scene.environment = pmrem.fromScene(studio, 0.04).texture
-      pmrem.dispose()
-
-      const key = new THREE.DirectionalLight('#ffffff', 1.2)
-      key.position.set(3, 8, 4)
-      key.castShadow = true
-      key.shadow.mapSize.setScalar(2048)
-      key.shadow.camera.left = key.shadow.camera.bottom = -4
-      key.shadow.camera.right = key.shadow.camera.top = 4
-      key.shadow.camera.near = 1
-      key.shadow.camera.far = 20
-      key.shadow.bias = -0.0002 // a share of near to far: about 4 mm
-      scene.add(key)
-
-      const floor = new THREE.Mesh(
-        new THREE.CircleGeometry(24, 96).rotateX(-Math.PI / 2),
-        new THREE.MeshStandardNodeMaterial({ color: '#1a1d24', roughness: 0.3 }),
-      )
-      floor.receiveShadow = true
-      const plinth = new THREE.Mesh(
-        new THREE.CylinderGeometry(1.5, 1.55, 0.16, 96).translate(0, 0.08, 0),
-        new THREE.MeshStandardNodeMaterial({ color: '#1d2028', roughness: 0.45 }),
-      )
-      plinth.castShadow = plinth.receiveShadow = true
-      scene.add(floor, plinth)
-
-      // Unlit and brighter than white: what the effects light up.
-      const neon = (color, intensity = 4) => new THREE.MeshBasicNodeMaterial({ color: color.clone().multiplyScalar(intensity) })
-
-      const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 60)
-      camera.position.set(0, 2.1, 6)
+      const camera = new THREE.PerspectiveCamera(params.fov, window.innerWidth / window.innerHeight, 0.1, 2000)
+      camera.position.set(1.2, 2.2, 5.3)
       const controls = new OrbitControls(camera, renderer.domElement)
-      controls.target.set(0, 1.1, 0)
+      controls.target.set(0, 1, -0.45)
       controls.enableDamping = true
-      controls.minDistance = 3
-      controls.maxDistance = 14
+      // in front of the backdrop, which then fills the view
+      controls.minDistance = 2
+      controls.maxDistance = 11
+      controls.minAzimuthAngle = -0.65
+      controls.maxAzimuthAngle = 0.65
       controls.maxPolarAngle = THREE.MathUtils.degToRad(85)
       controls.update()
+      // The drift sways the view about where it starts, slowly: under a pixel a frame, where aliasing crawls.
+      const DRIFT_CENTER = controls.getAzimuthalAngle()
+      const DRIFT_RANGE = 0.25
+      let driftDirection = 1
 
       window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth / window.innerHeight
@@ -127,58 +98,207 @@
         renderer.setSize(window.innerWidth, window.innerHeight)
       })
 
-      // ---- TAAU: a hyperboloid of chrome and neon rods, thinner than a pixel ----
+      // ---- The set: a painted backdrop out in the sun ----
 
-      // Straight rods from a base ring to a top ring, a third of a turn round: two families, crossed, pinch into a
-      // hyperboloid. Each rod is an instance of one unit cylinder.
-      const RING = 1
-      const BASE = 0.24
-      const TOP = 2.46
-      const TWIST = (Math.PI * 2) / 3
+      // The sun: high in the front left, so the shadows fall back across the sweep.
+      const SUN = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(52), THREE.MathUtils.degToRad(-40))
 
+      const sky = new SkyMesh()
+      sky.scale.setScalar(1000)
+      sky.turbidity.value = 3
+      sky.sunPosition.value.copy(SUN)
+      scene.add(sky)
+
+      const sun = new THREE.DirectionalLight('#fff2df', 7)
+      sun.position.copy(SUN).multiplyScalar(20)
+      sun.castShadow = true
+      sun.shadow.mapSize.setScalar(2048)
+      Object.assign(sun.shadow.camera, { left: -5, right: 5, top: 5, bottom: -5, near: 10, far: 30 })
+      sun.shadow.bias = -0.0003
+      sun.shadow.normalBias = 0.01
+      sun.shadow.radius = 2
+      scene.add(sun)
+
+      const ground = new THREE.Mesh(
+        new THREE.CircleGeometry(400, 64).rotateX(-Math.PI / 2),
+        new THREE.MeshStandardNodeMaterial({ name: 'ground', color: '#a9aeb3', roughness: 1 }),
+      )
+      ground.name = 'ground'
+      ground.receiveShadow = true
+      scene.add(ground)
+
+      // A seamless sweep: a painted muslin floor that bends up into a wall, wide and tall enough to fill every view.
+      const SWEEP = { width: 50, front: 9, back: -3.5, radius: 2, height: 8 }
+      const profile = [[SWEEP.back - SWEEP.radius, SWEEP.height]] // z, y: from the wall's top to the floor's front
+      for (let i = 0; i <= 24; i++) {
+        const t = (1 - i / 24) * (Math.PI / 2)
+        profile.push([SWEEP.back - SWEEP.radius * Math.sin(t), SWEEP.radius * (1 - Math.cos(t))])
+      }
+      profile.push([SWEEP.front, 0])
+      const along = [0] // m down the profile, for a texture without stretch
+      for (let row = 1; row < profile.length; row++) {
+        along.push(along[row - 1] + Math.hypot(profile[row][0] - profile[row - 1][0], profile[row][1] - profile[row - 1][1]))
+      }
+      const LENGTH = along.at(-1)
+      const sweepGeometry = new THREE.PlaneGeometry(SWEEP.width, 1, 1, profile.length - 1)
+      const position = sweepGeometry.attributes.position
+      const uvs = sweepGeometry.attributes.uv
+      for (let i = 0; i < position.count; i++) {
+        const row = Math.floor(i / 2) // two vertices a row, rows top to bottom
+        const [z, y] = profile[row]
+        position.setY(i, y + 0.002) // clear of the ground
+        position.setZ(i, z)
+        uvs.setY(i, 1 - along[row] / LENGTH)
+      }
+      sweepGeometry.computeVertexNormals()
+
+      // The paint, baked once: broad clouds of tone, smaller blotches and the cloth's tooth, with metres as units.
+      const paintTarget = new THREE.RenderTarget(4096, 2048, {
+        depthBuffer: false,
+        generateMipmaps: true,
+        minFilter: THREE.LinearMipmapLinearFilter,
+        anisotropy: 8,
+      })
+      paintTarget.texture.name = 'muslin paint'
+      {
+        const p = uv().mul(vec2(SWEEP.width, LENGTH))
+        const clouds = mx_fractal_noise_float(vec3(p.mul(0.16), 4.7), 5, 2, 0.55)
+        const blotches = mx_fractal_noise_float(vec3(p.mul(0.8), 9.3), 3, 2, 0.5)
+        const tooth = mx_noise_float(vec3(p.mul(45), 2.2))
+        const shade = clouds.mul(0.38).add(blotches.mul(0.1)).add(tooth.mul(0.035)).add(0.5).saturate()
+        const quad = new THREE.QuadMesh(new THREE.MeshBasicNodeMaterial({ name: 'muslin paint', fragmentNode: vec4(shade, 0, 0, 1) }))
+        renderer.setRenderTarget(paintTarget)
+        quad.render(renderer)
+        renderer.setRenderTarget(null)
+        quad.material.dispose()
+      }
+      const muslin = new THREE.MeshStandardNodeMaterial({ name: 'sweep', roughness: 0.92 })
+      muslin.colorNode = mix(color('#7f8893'), color('#cfd4d9'), smoothstep(0.08, 0.92, texture(paintTarget.texture).r))
+      const sweep = new THREE.Mesh(sweepGeometry, muslin)
+      sweep.name = 'sweep'
+      sweep.receiveShadow = sweep.castShadow = true
+      scene.add(sweep)
+
+      // ---- The props: black lines that stand out against the sweep, and chrome ----
+
+      // Matte, as a glossy highlight would outshine the sweep and turn the thinnest rods white.
+      const black = new THREE.MeshStandardNodeMaterial({ name: 'black paint', color: '#141518', roughness: 0.85 })
+      const chrome = new THREE.MeshStandardNodeMaterial({ name: 'chrome', color: '#dfe2e6', metalness: 1, roughness: 0.04 })
+
+      // A cylinder from one point to another, to merge with others into one geometry.
+      const UP = new THREE.Vector3(0, 1, 0)
+      const _direction = new THREE.Vector3()
+      const _rotation = new THREE.Quaternion()
+      const _matrix = new THREE.Matrix4()
+      function rod(from, to, radius, radialSegments = 8, openEnded = false) {
+        const length = from.distanceTo(to)
+        _direction.subVectors(to, from).normalize()
+        _rotation.setFromUnitVectors(UP, _direction)
+        _matrix.compose(from.clone().lerp(to, 0.5), _rotation, new THREE.Vector3(1, 1, 1))
+        return new THREE.CylinderGeometry(radius, radius, length, radialSegments, 1, openEnded).applyMatrix4(_matrix)
+      }
+      const v = (x, y, z) => new THREE.Vector3(x, y, z)
+      const shadows = (mesh) => {
+        mesh.castShadow = mesh.receiveShadow = true
+        return mesh
+      }
+
+      // The pendulum wave: each pendulum makes one swing more than the one before in a cycle, so their phases fan out
+      // into travelling waves and come back in line once a cycle. Each ball hangs from a V of two wires along the bar,
+      // so it swings across it, and the Vs cross their neighbours'.
+      const WAVE = {
+        cycle: 36, // s
+        swings: 18, // the longest pendulum's swings in a cycle
+        count: 15,
+        width: 2, // m from the first ball to the last
+        bar: 1.7, // m, the top bar's height
+        spread: 0.15, // m from a V's middle to each wire's top
+        ball: 0.05, // m, radius
+        wire: 0.0012, // m, radius: about a pixel wide on a retina screen from the default view
+        amplitude: 0.18, // rad
+      }
+      const pendulumWave = new THREE.Group()
+      pendulumWave.position.set(-0.15, 0, -0.5)
+      scene.add(pendulumWave)
+
+      {
+        // a base board, two posts and the bar
+        const POST = WAVE.width / 2 + 0.25
+        const TUBE = 0.014
+        const BOARD = 0.025
+        const board = new THREE.BoxGeometry(POST * 2 + 0.16, BOARD, 0.34).translate(0, BOARD / 2, 0)
+        const frame = [board, rod(v(-POST - TUBE, WAVE.bar, 0), v(POST + TUBE, WAVE.bar, 0), TUBE, 12)]
+        for (const x of [-POST, POST]) frame.push(rod(v(x, BOARD, 0), v(x, WAVE.bar, 0), TUBE, 12))
+        pendulumWave.add(shadows(new THREE.Mesh(mergeGeometries(frame), black)))
+      }
+
+      const ballGeometry = new THREE.SphereGeometry(WAVE.ball, 48, 24)
+      const pendulums = []
+      for (let i = 0; i < WAVE.count; i++) {
+        const frequency = (WAVE.swings + i) / WAVE.cycle // swings a second
+        const length = 9.81 / (2 * Math.PI * frequency) ** 2 // m, to the ball's centre
+        const x = (i / (WAVE.count - 1) - 0.5) * WAVE.width
+        const pendulum = new THREE.Group() // pivots on the bar
+        pendulum.position.set(x, WAVE.bar, 0)
+        const knot = v(0, -length + WAVE.ball * 0.9, 0)
+        const wires = mergeGeometries([rod(v(-WAVE.spread, 0, 0), knot, WAVE.wire, 6, true), rod(v(WAVE.spread, 0, 0), knot, WAVE.wire, 6, true)])
+        pendulum.add(new THREE.Mesh(wires, black)) // too thin for the shadow map
+        const ball = shadows(new THREE.Mesh(ballGeometry, chrome))
+        ball.position.y = -length
+        pendulum.add(ball)
+        pendulumWave.add(pendulum)
+        pendulums.push({ pendulum, frequency })
+      }
+
+      // A chrome sphere on the floor, in front on the left: the sky and the sweep, curved across it.
+      const SPHERE = 0.42
+      const sphere = shadows(new THREE.Mesh(new THREE.SphereGeometry(SPHERE, 128, 64), chrome))
+      sphere.position.set(-1.9, SPHERE, 0.65)
+      scene.add(sphere)
+
+      // A string sculpture behind on the right: straight rods from a base ring to a top ring, a third of a turn round,
+      // in two crossed families that pinch into a hyperboloid.
       const sculpture = new THREE.Group()
+      sculpture.position.set(1.95, 0, -1.35)
       scene.add(sculpture)
-
-      const chrome = new THREE.MeshStandardNodeMaterial({ color: '#ffffff', metalness: 1, roughness: 0.15 })
-      const rodGeometry = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true)
-      const from = new THREE.Vector3()
-      const to = new THREE.Vector3()
-      const up = new THREE.Vector3(0, 1, 0)
-      const rotation = new THREE.Quaternion()
-      const scale = new THREE.Vector3()
-      const matrix = new THREE.Matrix4()
-
-      function rods(material, thickness, twist, count, phase = 0) {
-        const mesh = new THREE.InstancedMesh(rodGeometry, material, count)
-        for (let i = 0; i < count; i++) {
-          const angle = phase + (i / count) * Math.PI * 2
-          from.set(Math.cos(angle) * RING, BASE, Math.sin(angle) * RING)
-          to.set(Math.cos(angle + twist) * RING, TOP, Math.sin(angle + twist) * RING)
-          const length = to.distanceTo(from)
-          const direction = to.sub(from).normalize()
-          rotation.setFromUnitVectors(up, direction)
-          matrix.compose(from.addScaledVector(direction, length / 2), rotation, scale.set(thickness, length, thickness))
-          mesh.setMatrixAt(i, matrix)
+      {
+        const RING = 0.46
+        const BASE = 0.12
+        const TOP = 1.62
+        const TWIST = (Math.PI * 2) / 3
+        const plinth = shadows(new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.62, 0.08, 96).translate(0, 0.04, 0), black))
+        const rods = []
+        for (const twist of [TWIST, -TWIST]) {
+          for (let i = 0; i < 24; i++) {
+            const angle = (i / 24) * Math.PI * 2
+            const from = v(Math.cos(angle) * RING, BASE, Math.sin(angle) * RING)
+            const to = v(Math.cos(angle + twist) * RING, TOP, Math.sin(angle + twist) * RING)
+            rods.push(rod(from, to, 0.002, 6, true))
+          }
         }
-        mesh.castShadow = true
-        sculpture.add(mesh)
+        const rings = [BASE, TOP].map((y) => new THREE.TorusGeometry(RING, 0.009, 8, 160).rotateX(Math.PI / 2).translate(0, y, 0))
+        const posts = [0, 1, 2].map((i) => {
+          const angle = (i / 3) * Math.PI * 2
+          return rod(v(Math.cos(angle) * RING, 0.08, Math.sin(angle) * RING), v(Math.cos(angle) * RING, BASE, Math.sin(angle) * RING), 0.009)
+        })
+        sculpture.add(plinth, shadows(new THREE.Mesh(mergeGeometries(rods), black)), shadows(new THREE.Mesh(mergeGeometries([...rings, ...posts]), chrome)))
       }
 
-      rods(chrome, 0.01, TWIST, 24)
-      NEON.forEach((color, i) => rods(neon(color), 0.006, -TWIST, 8, (i / 24) * Math.PI * 2))
+      // The sky and the sunlit sweep light everything else: the environment, seen from the set without the props.
+      const props = [pendulumWave, sphere, sculpture]
+      for (const object of props) object.visible = false
+      const pmrem = new THREE.PMREMGenerator(renderer)
+      scene.environment = pmrem.fromScene(scene, 0.02, 0.1, 2000, { position: new THREE.Vector3(0, 1.2, 0) }).texture
+      scene.environmentIntensity = 0.25 // the fill: the sun stays the key
+      chrome.envMap = scene.environment // the chrome mirrors it at full strength
+      pmrem.dispose()
+      for (const object of props) object.visible = true
 
-      for (const y of [BASE, TOP]) {
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(RING, 0.016, 8, 160).rotateX(Math.PI / 2), chrome)
-        ring.position.y = y
-        ring.castShadow = true
-        sculpture.add(ring)
-      }
+      // ---- Post-processing: TAAU ----
 
-      // Rendered jittered and below the output's resolution, without MSAA; TAAU resolves it at the output's.
-      const params = { taau: true, resolution: 0.5, spin: 1 }
+      // Rendered jittered, at or below the output's resolution and without MSAA; TAAU resolves it at the output's.
       const scenePass = pass(scene, camera, { samples: 0 })
       scenePass.setMRT(mrt({ output, velocity }))
-      scenePass.setResolutionScale(params.resolution)
       const sceneColor = scenePass.getTextureNode('output')
       const taauNode = taau(sceneColor, scenePass.getTextureNode('depth'), scenePass.getTextureNode('velocity'), camera)
 
@@ -186,29 +306,85 @@
       const pipeline = new THREE.RenderPipeline(renderer)
       pipeline.outputColorTransform = false
       function setOutput() {
-        if (params.taau) taauNode.resetHistory() // the history is stale
+        if (params.taau) taauNode.resetHistory() // back in the output graph: the history is stale
         pipeline.outputNode = renderOutput(params.taau ? taauNode.getTextureNode() : sceneColor)
         pipeline.needsUpdate = true
+        setSampling()
+      }
+      // Without TAAU, the scene renders at the output's resolution.
+      function setSampling() {
+        scenePass.setResolutionScale(params.taau ? Math.min(1, params.renderPixelRatio / renderer.getPixelRatio()) : 1)
+      }
+      // The output's pixel ratio, and the scene's share of it: a move to another display changes the device's.
+      function setPixelRatio() {
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO))
+        setSampling()
       }
       setOutput()
+      window.addEventListener('resize', setPixelRatio)
+
+      // ---- GUI ----
 
       const gui = new GUI({ title: 'TAAU' })
       if (window.innerWidth < 600) gui.close()
-      gui.add(params, 'taau').onChange(setOutput)
-      gui.add(params, 'resolution', 0.25, 1, 0.05).onChange((value) => scenePass.setResolutionScale(value))
-      gui.add(taauNode.maxAccumulation, 'value', 1, 32, 1).name('maxAccumulation')
-      gui.add(params, 'spin', 0, 3, 0.01)
+      gui.add(params, 'taau').name('TAAU').onChange(setOutput)
+      gui.add(taauNode.maxAccumulation, 'value', 1, 32, 1).name('max accumulation')
+      gui.add(params, 'swing', 0, 2, 0.01).name('pendulum speed')
+      gui.add(params, 'spin', 0, 1, 0.01).name('sculpture spin')
+      gui.add(params, 'drift', 0, 1, 0.01).name('camera drift')
+      const resolution = gui.addFolder('Resolution') // open: TAAU's upscaling is the demo's subject
+      resolution.add(params, 'renderPixelRatio', 0.5, 2, 0.5).name('TAAU pixel ratio').onChange(setSampling)
+      const look = gui.addFolder('Camera').close()
+      look.add(params, 'fov', 15, 70, 1).onChange((value) => {
+        camera.fov = value
+        camera.updateProjectionMatrix()
+      })
+      look.add(params, 'exposure', 0.2, 3, 0.01).onChange((value) => (renderer.toneMappingExposure = value))
+      // Logs the current view as code for the camera's start, and copies it.
+      const view = {
+        log() {
+          const xyz = (vector) => vector.toArray().map((value) => +value.toFixed(3)).join(', ')
+          const code = [
+            `camera.position.set(${xyz(camera.position)})`,
+            `controls.target.set(${xyz(controls.target)})`,
+            `fov: ${camera.fov}`,
+          ].join('\n')
+          console.log(code)
+          navigator.clipboard?.writeText(code).catch(() => {})
+        },
+      }
+      look.add(view, 'log').name('log view')
+
+      // ---- Loop ----
 
       const timer = new THREE.Timer()
       timer.connect(document)
-      renderer.setAnimationLoop((time) => {
-        timer.update(time)
-        sculpture.rotation.y += timer.getDelta() * params.spin * 0.15
-        controls.update()
+      let time = 7 // s into the wave's cycle: its phases have fanned out
+      await loading.stage('Compiling shaders…') // shown before the first frame's shader build blocks the page
+      renderer.setAnimationLoop((now) => {
+        timer.update(now)
+        const delta = Math.min(timer.getDelta(), 1 / 20)
+        time += delta * params.swing
+        for (const { pendulum, frequency } of pendulums) {
+          pendulum.rotation.x = WAVE.amplitude * Math.cos(2 * Math.PI * frequency * time)
+        }
+        sculpture.rotation.y += delta * params.spin
+
+        // the drift turns back at either end of its range
+        const azimuth = controls.getAzimuthalAngle() - DRIFT_CENTER
+        if (azimuth > DRIFT_RANGE) driftDirection = 1
+        else if (azimuth < -DRIFT_RANGE) driftDirection = -1
+        controls.autoRotate = params.drift > 0
+        controls.autoRotateSpeed = params.drift * driftDirection
+        controls.update(delta)
+
+        syncUnjitteredProjection(camera) // TAAU can leave the output graph
         pipeline.render()
         stats.update()
         renderer.resolveTimestampsAsync('render')
       })
+      // off once the scene has drawn: its shaders compile on the first frame, behind the loading screen
+      loading.done()
     </script>
   </body>
 </html>

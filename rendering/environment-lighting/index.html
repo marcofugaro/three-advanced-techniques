@@ -1,0 +1,906 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Environment lighting</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #121114;
+      }
+      canvas {
+        display: block;
+        touch-action: none;
+      }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.webgpu.js",
+          "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.webgpu.js",
+          "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.tsl.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/",
+          "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.21.0/dist/lil-gui.esm.js",
+          "stats-gl": "https://cdn.jsdelivr.net/npm/stats-gl@4.2.3/dist/main.js"
+        }
+      }
+    </script>
+    <script src="../../utils/loading.js"></script>
+  </head>
+  <body>
+    <loading-screen style="--background: #121114; --color: #d9d3ca"></loading-screen>
+    <script type="module">
+      import * as THREE from 'three/webgpu'
+      import {
+        Fn,
+        If,
+        abs,
+        attribute,
+        color,
+        exp,
+        fract,
+        int,
+        length,
+        lights,
+        mix,
+        mrt,
+        mx_noise_float,
+        normalView,
+        normalWorld,
+        output,
+        pass,
+        positionViewDirection,
+        positionWorld,
+        renderOutput,
+        smoothstep,
+        step,
+        uniform,
+        uniformArray,
+        vec2,
+        vec3,
+        vec4,
+        velocity,
+      } from 'three/tsl'
+      import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+      import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+      import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
+      import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
+      import GUI from 'lil-gui'
+      import Stats from 'stats-gl'
+      import '../area-light/rectAreaLTC.js' // three's RectAreaLight, with its LTC tables
+      import { bloom } from '../bloom/BloomNode.js'
+      import { taau } from '../taau/TAAUNode.js'
+      import { IrradianceProbeColumn, IrradianceProbeColumnHelper } from './IrradianceProbeColumn.js'
+      import { SlicedPMREMGenerator } from './SlicedPMREMGenerator.js'
+
+      // ---- An underground garage whose light keeps changing: a figure on a turntable, lit by the room as it is now ----
+
+      const params = {
+        live: true, // re-capture the environment as it changes
+        diffuse: 'probes', // the figure's diffuse: the probe column's, or the PMREM's roughest level
+        probes: 3,
+        showProbes: false,
+        refresh: 'two frames', // the whole refresh in two frames, a slice a frame, or in every frame
+        facesPerSlice: 2,
+        levelsPerSlice: 2,
+        prefilter: 64, // the PMREM prefilter's samples on its first rough level; 0 for three's
+        framesPerRefresh: 0, // read-out
+        animate: true,
+        door: 0, // the garage door, 0 closed, 1 open
+        neons: 1, // the neons' brightness
+        spin: 0, // turntable, turns per minute
+        finish: 'armour',
+        bounce: 0.45, // the room's own share of the environment: its walls light each other through it
+        exposure: 1,
+        // Resolution, as worm-monster's desktop tier: the scene's pixels per CSS pixel, one of RENDER_PIXEL_RATIOS,
+        // which TAAU upscales to the output's
+        renderPixelRatio: 1,
+      }
+      const RENDER_PIXEL_RATIOS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
+      const MAX_PIXEL_RATIO = 2 // the output's pixels per CSS pixel at most
+
+      const renderer = new THREE.WebGPURenderer({ antialias: false }) // TAAU anti-aliases
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO))
+      renderer.setSize(window.innerWidth, window.innerHeight)
+      renderer.toneMapping = THREE.AgXToneMapping
+      renderer.toneMappingExposure = params.exposure
+      renderer.shadowMap.enabled = true
+      renderer.shadowMap.type = THREE.PCFShadowMap
+      document.body.appendChild(renderer.domElement)
+      await renderer.init()
+
+      const stats = new Stats({ trackGPU: renderer.hasFeature('timestamp-query') })
+      document.body.appendChild(stats.dom)
+      stats.init(renderer)
+
+      const scene = new THREE.Scene()
+
+      // Orbiting the figure's middle; the garage is big enough that the camera never reaches a wall
+      const TARGET = new THREE.Vector3(0, 1.06, 0)
+      const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.05, 100)
+      camera.position.set(2.267, 1.495, -2.382)
+      const controls = new OrbitControls(camera, renderer.domElement)
+      controls.target.copy(TARGET)
+      controls.enableDamping = true
+      controls.enablePan = false // the target stays at the centre
+      controls.minDistance = 1.2
+      controls.maxDistance = 3.4
+      controls.maxPolarAngle = THREE.MathUtils.degToRad(100) // above the floor
+      controls.update()
+
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight
+        camera.updateProjectionMatrix()
+        renderer.setSize(window.innerWidth, window.innerHeight)
+      })
+
+      // ---- The garage: an underground car park, a roller door in the back wall opening on a ramp up to the street ----
+
+      // Interior in metres, centred on the turntable: its walls HALF from the centre, WALL thick outside that
+      const HALF = 5.5
+      const HEIGHT = 4.7
+      const WALL = 0.25
+      const DOOR = { width: 4.2, height: 3.4 } // centred in the back wall, at z = -HALF
+      const BEAM = { z: 3.25, depth: 0.45 } // across the ceiling at z = ±BEAM.z, on the columns
+      const COLUMN = { x: 3.6, size: 0.55 }
+      const FLOOR_RING = 1.25 // the neon ring's radius on the floor round the turntable
+
+      // Every material lit inside: by the sun, the neons' spill and the doorway's daylight, and the environment at `bounce`
+      const roomMaterials = []
+      const roomMaterial = (options) => {
+        const material = new THREE.MeshStandardNodeMaterial(options)
+        roomMaterials.push(material)
+        return material
+      }
+      // concrete's blotches, about 1
+      const blotches = (scale, amount, seed = 0, position = positionWorld) => mx_noise_float(position.mul(scale).add(seed)).mul(amount).add(1)
+      // 1 where `distance` (m) is within `width` of a painted line, softened over 1 cm
+      const line = (distance, width) => smoothstep(width - 0.01, width, distance).oneMinus()
+
+      // Block walls: painted dark below a yellow band, bare above, the joints a shade darker
+      const walls = roomMaterial({ name: 'walls' })
+      {
+        const along = positionWorld.x.add(positionWorld.z) // along whichever wall
+        const y = positionWorld.y
+        const row = y.div(0.2).floor()
+        const inBlock = fract(along.div(0.4).add(row.mul(0.5))).mul(0.4).min(fract(y.div(0.2)).mul(0.2))
+        const face = smoothstep(0.004, 0.012, inBlock)
+        const painted = step(y, 1.25)
+        const base = mix(color('#8b8781'), color('#2c3531'), painted)
+        const band = step(1.1, y).mul(painted)
+        walls.colorNode = mix(base, color('#c4952b'), band).mul(mix(0.7, 1, face)).mul(blotches(1.1, 0.14)).mul(blotches(6, 0.05, 3))
+        walls.roughnessNode = mix(0.9, 0.6, painted)
+      }
+      // the sun's shadow cast from the walls' outer faces and the slab's top: from the inner faces, at its grazing angle,
+      // it leaks along the joints
+      walls.shadowSide = THREE.FrontSide
+
+      // Sealed concrete: blotchy, oil-stained, worn lines along the lane's edges
+      const floor = roomMaterial({ name: 'floor' })
+      const floorRingGlow = uniform(new THREE.Color()) // the light the floor's neon ring casts round itself, set below
+      {
+        const p = positionWorld
+        const stain = smoothstep(0.3, 0.75, mx_noise_float(p.mul(0.35).add(7.3))).mul(0.5)
+        const laneEdge = line(abs(abs(p.x).sub(3)), 0.06)
+        const wear = smoothstep(-0.3, 0.4, mx_noise_float(p.mul(2.7)))
+        const paint = laneEdge.mul(wear).mul(0.85)
+        const concrete = color('#6f6b65').mul(blotches(0.8, 0.16)).mul(blotches(5, 0.06, 11)).mul(stain.oneMinus())
+        floor.colorNode = mix(concrete, color('#d6d0c0'), paint)
+        floor.roughnessNode = mix(0.68, 0.3, stain) // oil is glossier
+        // the floor ring's glow, painted on: a soft band either side of it
+        const toRing = abs(length(p.xz).sub(FLOOR_RING))
+        floor.emissiveNode = floorRingGlow.mul(exp(toRing.div(0.12).pow(2).negate()).mul(0.04).add(exp(toRing.div(0.6).negate()).mul(0.008)))
+      }
+
+      const ceiling = roomMaterial({ name: 'ceiling', roughness: 0.95 })
+      ceiling.colorNode = color('#484642').mul(blotches(0.9, 0.2, 5))
+      ceiling.shadowSide = THREE.FrontSide
+
+      // Columns painted pale over hazard stripes at their foot
+      const columns = roomMaterial({ name: 'columns', roughness: 0.75 })
+      {
+        const y = positionWorld.y
+        const stripes = step(0.5, fract(positionWorld.x.add(positionWorld.z).add(y).div(0.3)))
+        const hazard = mix(color('#d29c22'), color('#151515'), stripes)
+        columns.colorNode = mix(hazard, color('#aeaaa0').mul(blotches(2, 0.1, 9)), step(1, y))
+      }
+
+      const steel = roomMaterial({ name: 'steel', color: '#3a3c3f', roughness: 0.45, metalness: 0.7 })
+      const sprinkler = roomMaterial({ name: 'sprinkler pipe', color: '#8a1f19', roughness: 0.5 })
+      const duct = roomMaterial({ name: 'duct', color: '#8d9093', roughness: 0.4, metalness: 0.8 })
+
+      // The roller door's slats: they slide up with the door as it rolls into its drum
+      const doorRolled = uniform(0) // metres rolled up
+      const slats = roomMaterial({ name: 'roller door', roughness: 0.45, metalness: 0.6 })
+      {
+        const f = fract(positionWorld.y.sub(doorRolled).div(0.09))
+        const groove = smoothstep(0, 0.12, f).mul(smoothstep(0.85, 1, f).oneMinus())
+        slats.colorNode = color('#a2a6a9').mul(mix(0.4, 1, groove)).mul(blotches(1.5, 0.12, 2, positionWorld.sub(vec3(0, doorRolled, 0))))
+      }
+
+      // Static geometry merged into one mesh per material: the captures draw the scene many times a refresh
+      const pieces = new Map()
+      const piece = (material, geometry) => {
+        if (!pieces.has(material)) pieces.set(material, [])
+        pieces.get(material).push(geometry)
+      }
+      const box = (material, [x0, x1], [y0, y1], [z0, z1]) =>
+        piece(material, new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0).translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2))
+      // A pipe from `a` to `b` along one axis
+      const pipe = (material, radius, a, b) => {
+        const from = new THREE.Vector3(...a)
+        const to = new THREE.Vector3(...b)
+        const geometry = new THREE.CylinderGeometry(radius, radius, from.distanceTo(to), 16)
+        geometry.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize()))
+        piece(material, geometry.translate(...from.add(to).multiplyScalar(0.5).toArray()))
+      }
+      const OUT = HALF + WALL
+      box(floor, [-OUT, OUT], [-WALL, 0], [-OUT, OUT])
+      box(ceiling, [-OUT, OUT], [HEIGHT, HEIGHT + WALL], [-OUT, OUT])
+      box(walls, [-OUT, -HALF], [0, HEIGHT], [-OUT, OUT])
+      box(walls, [HALF, OUT], [0, HEIGHT], [-OUT, OUT])
+      box(walls, [-OUT, OUT], [0, HEIGHT], [HALF, OUT])
+      // the back wall round the door
+      box(walls, [-OUT, -DOOR.width / 2], [0, HEIGHT], [-OUT, -HALF])
+      box(walls, [DOOR.width / 2, OUT], [0, HEIGHT], [-OUT, -HALF])
+      box(walls, [-DOOR.width / 2, DOOR.width / 2], [DOOR.height, HEIGHT], [-OUT, -HALF])
+      for (const z of [-BEAM.z, BEAM.z]) {
+        box(ceiling, [-HALF, HALF], [HEIGHT - BEAM.depth, HEIGHT], [z - 0.2, z + 0.2])
+        for (const x of [-COLUMN.x, COLUMN.x]) {
+          const s = COLUMN.size / 2
+          box(columns, [x - s, x + s], [0, HEIGHT - BEAM.depth], [z - s, z + s])
+        }
+      }
+      pipe(sprinkler, 0.05, [-HALF, 4.42, -1.9], [HALF, 4.42, -1.9])
+      for (const x of [-3, -1, 1, 3]) pipe(sprinkler, 0.012, [x, 4.42, -1.9], [x, 4.28, -1.9]) // drops to the heads
+      pipe(duct, 0.2, [2.8, 3.98, -HALF], [2.8, 3.98, HALF]) // under the beams and the sprinkler main
+      // the door's guides, and the box over it that hides the drum
+      for (const x of [-DOOR.width / 2 - 0.08, DOOR.width / 2]) box(steel, [x, x + 0.08], [0, DOOR.height], [-HALF, -HALF + 0.12])
+      box(steel, [-DOOR.width / 2 - 0.15, DOOR.width / 2 + 0.15], [DOOR.height, DOOR.height + 0.6], [-HALF, -HALF + 0.5])
+
+      const room = new THREE.Group()
+      room.name = 'garage'
+      scene.add(room)
+      for (const [material, geometries] of pieces) {
+        const mesh = new THREE.Mesh(mergeGeometries(geometries), material)
+        mesh.name = material.name
+        mesh.castShadow = mesh.receiveShadow = true
+        room.add(mesh)
+      }
+
+      // The door: its top fixed under the drum, its bottom rising as it rolls up
+      const doorPanel = new THREE.Mesh(new THREE.BoxGeometry(DOOR.width + 0.1, DOOR.height, 0.04).translate(0, -DOOR.height / 2, 0), slats)
+      doorPanel.name = 'roller door'
+      doorPanel.position.set(0, DOOR.height, -HALF + 0.06)
+      doorPanel.castShadow = doorPanel.receiveShadow = true
+      scene.add(doorPanel)
+
+      // ---- Outside: a ramp up to the street, open to the sky ----
+
+      const RAMP = { length: 30, rise: 5.2, width: 8 }
+      // The ramp: tyre tracks up the middle of each lane, worn yellow lines along its edges
+      const rampMaterial = new THREE.MeshStandardNodeMaterial({ name: 'ramp', roughness: 0.85 })
+      {
+        const side = abs(positionWorld.x)
+        const tracks = smoothstep(0.12, 0.4, abs(side.sub(1.1))).oneMinus().mul(0.3)
+        const edge = step(3.55, side).mul(step(side, 3.7)).mul(smoothstep(-0.2, 0.3, mx_noise_float(positionWorld.mul(2.3))))
+        rampMaterial.colorNode = mix(color('#8a857c').mul(tracks.oneMinus()), color('#c9a227'), edge).mul(blotches(0.6, 0.18, 4))
+      }
+      // Cast retaining walls: a joint between each 1.2 m lift, stains run down from the top
+      const retaining = new THREE.MeshStandardNodeMaterial({ name: 'retaining walls', roughness: 0.9 })
+      {
+        const p = positionWorld
+        const lift = line(fract(p.y.div(1.2)).mul(1.2), 0.015)
+        const streaks = mx_noise_float(vec3(p.x.mul(0.5), p.y.mul(0.15), p.z.mul(4))).mul(0.12).add(0.94)
+        retaining.colorNode = color('#9a958c').mul(mix(1, 0.75, lift)).mul(streaks).mul(blotches(0.7, 0.12, 8))
+      }
+      const street = new THREE.MeshStandardNodeMaterial({ name: 'street', color: '#4b4a49', roughness: 0.9 })
+      const outside = new THREE.Group()
+      outside.name = 'outside'
+      scene.add(outside)
+      {
+        const slope = Math.atan2(RAMP.rise, RAMP.length)
+        const ramp = new THREE.Mesh(
+          new THREE.PlaneGeometry(RAMP.width, Math.hypot(RAMP.length, RAMP.rise))
+            .rotateX(slope - Math.PI / 2)
+            .translate(0, RAMP.rise / 2, -OUT - RAMP.length / 2),
+          rampMaterial,
+        )
+        const top = RAMP.rise + 1
+        const sides = [-1, 1].map((side) => {
+          const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.3, top, RAMP.length), retaining)
+          mesh.position.set(side * (RAMP.width / 2 + 0.15), top / 2, -OUT - RAMP.length / 2)
+          return mesh
+        })
+        const road = new THREE.Mesh(new THREE.PlaneGeometry(160, 30).rotateX(-Math.PI / 2), street)
+        road.position.set(0, RAMP.rise, -OUT - RAMP.length - 15)
+        for (const mesh of [ramp, ...sides, road]) {
+          mesh.castShadow = mesh.receiveShadow = true
+          outside.add(mesh)
+        }
+      }
+      const skyMaterial = new THREE.MeshBasicNodeMaterial({ name: 'sky' })
+      skyMaterial.colorNode = mix(color('#f1e6d6'), color('#6f9bd4'), smoothstep(4, 30, positionWorld.y)).mul(2.6)
+      const sky = new THREE.Mesh(new THREE.PlaneGeometry(240, 90).translate(0, 40, 0), skyMaterial)
+      sky.name = 'sky'
+      sky.position.z = -OUT - RAMP.length - 35
+      scene.add(sky)
+
+      // ---- The sun, low down the ramp: through the open door it reaches the turntable and the front wall ----
+
+      const SUN = new THREE.Vector3(0.15, 0.27, -0.95).normalize()
+      const sun = new THREE.DirectionalLight('#ffd9a8', 7)
+      sun.position.copy(SUN).multiplyScalar(40)
+      sun.castShadow = true
+      sun.shadow.mapSize.setScalar(4096) // the low sun stretches each texel 3.7× along the floor
+      sun.shadow.radius = 2.5
+      Object.assign(sun.shadow.camera, { left: -10, right: 10, top: 10, bottom: -10, near: 3, far: 47 })
+      // about a texel each: at the sun's grazing angle, every cm of bias moves a shadow ~4 cm off the feet casting it
+      sun.shadow.bias = -0.0001
+      sun.shadow.normalBias = 0.005
+      // drawn once a frame, by the main view: the capture faces reuse it rather than each drawing its own
+      sun.shadow.autoUpdate = false
+      sun.shadow.needsUpdate = true
+      scene.add(sun)
+      // outside, the sky lights what the sun doesn't
+      const skylight = new THREE.HemisphereLight('#a9c6ee', '#5d564d', 1.4)
+      scene.add(skylight)
+      const outsideLights = lights([sun, skylight])
+      for (const material of [rampMaterial, retaining, street]) material.lightsNode = outsideLights
+
+      // ---- The neons: glowing tubes, not lights. The figure sees them through the capture alone; the garage's own
+      // surfaces get their glow painted on round each tube, and a point light's wider spill, both ignored by the figure ----
+
+      // Every colour at the same luminance, so blue tubes glow as bright as yellow ones and all of them bloom
+      const NEON = { radius: 0.03, luminance: 5, spill: 0.1 } // spill: point light intensity per metre of tube
+      const neonParts = []
+      const neons = [] // each one's palette slot and tube length, and its colour and level, set by the cycle
+      const spills = [] // { light, members: neon indices }
+      const glowOn = { left: [], right: [], front: [], columns: [] } // the neons painted on each surface, and their shapes
+      // A neon from its geometry; the neons given one spill light share it
+      function addNeon(geometry, slot, spill = null, gain = 1) {
+        const index = neons.length
+        geometry.setAttribute('neon', new THREE.Float32BufferAttribute(new Float32Array(geometry.attributes.position.count).fill(index), 1))
+        neonParts.push(geometry)
+        const length = geometry.parameters.path?.getLength() ?? 2 * Math.PI * geometry.parameters.radius
+        neons.push({ slot, length, gain, colour: new THREE.Color(), level: 1 })
+        spill?.members.push(index)
+        return index
+      }
+      function addSpill(name, x, y, z) {
+        const light = new THREE.PointLight('#ffffff', NEON.spill, 7, 2)
+        light.name = `${name} spill`
+        light.position.set(x, y, z)
+        scene.add(light)
+        const spill = { light, members: [] }
+        spills.push(spill)
+        return spill
+      }
+      const pairs = (points) => points.slice(1).map((point, i) => [points[i], point])
+      // A tube along straight segments, its corners cut by the sampling
+      const tube = (points, closed = false) => {
+        const path = new THREE.CurvePath()
+        for (const [a, b] of pairs(closed ? [...points, points[0]] : points)) path.add(new THREE.LineCurve3(a, b))
+        // one segment for a straight tube, 32 a side otherwise
+        return new THREE.TubeGeometry(path, points.length === 2 && !closed ? 1 : points.length * 32, NEON.radius, 8, closed)
+      }
+      const onLeftWall = (z, y) => new THREE.Vector3(-HALF + 0.08, y, z)
+      const onRightWall = (z, y) => new THREE.Vector3(HALF - 0.08, y, z)
+      const onFrontWall = (x, y) => new THREE.Vector3(x, y, HALF - 0.08)
+
+      // a bar along the drum's box over the door
+      const doorBar = [new THREE.Vector3(-2.2, 3.72, -HALF + 0.56), new THREE.Vector3(2.2, 3.72, -HALF + 0.56)]
+      addNeon(tube(doorBar), 0, addSpill('door bar', 0, 3.3, -HALF + 1.3))
+      // left wall: a ring and a triangle
+      const RING = { z: -1.2, y: 2.4, radius: 0.85 }
+      const ring = new THREE.TorusGeometry(RING.radius, NEON.radius, 8, 96).rotateY(Math.PI / 2).translate(-HALF + 0.08, RING.y, RING.z)
+      glowOn.left.push({ index: addNeon(ring, 1, addSpill('ring', -HALF + 1, RING.y, RING.z)), ring: RING })
+      const triangle = [
+        [0, 0.92],
+        [0.8, -0.46],
+        [-0.8, -0.46],
+      ].map(([z, y]) => onLeftWall(2.3 + z, 2.3 + y))
+      const triangleSpill = addSpill('triangle', -HALF + 1, 2.3, 2.3)
+      glowOn.left.push({ index: addNeon(tube(triangle, true), 2, triangleSpill), segments: pairs([...triangle, triangle[0]]) })
+      // right wall: a lightning bolt and a wave
+      const bolt = [
+        [-2.9, 3.5],
+        [-2.05, 2.35],
+        [-2.55, 2.35],
+        [-1.65, 1.0],
+      ].map(([z, y]) => onRightWall(z, y))
+      glowOn.right.push({ index: addNeon(tube(bolt), 3, addSpill('bolt', HALF - 1, 2.3, -2.3)), segments: pairs(bolt) })
+      const WAVE = { from: 0.2, to: 2.6, y: 2.2, amplitude: 0.22 }
+      const wave = new THREE.CatmullRomCurve3(
+        Array.from({ length: 33 }, (_, i) => onRightWall(WAVE.from + ((WAVE.to - WAVE.from) * i) / 32, WAVE.y + WAVE.amplitude * Math.sin((i / 32) * Math.PI * 8))),
+      )
+      const waveIndex = addNeon(new THREE.TubeGeometry(wave, 256, NEON.radius, 8, false), 2, addSpill('wave', HALF - 1, WAVE.y, (WAVE.from + WAVE.to) / 2))
+      // its glow from the band it swings over
+      glowOn.right.push({ index: waveIndex, segments: [[onRightWall(WAVE.from, WAVE.y), onRightWall(WAVE.to, WAVE.y)]], inset: WAVE.amplitude * 0.7 })
+      // front wall: an equaliser, its bars lighting from the middle out as its level swings
+      const equaliser = addSpill('equaliser', 0, 1.8, HALF - 1)
+      const bars = [0.8, 1.3, 1.8, 1.3, 0.8].map((tall, i) => {
+        const bar = [onFrontWall((i - 2) * 0.45, 1.0), onFrontWall((i - 2) * 0.45, 1.0 + tall)]
+        const index = addNeon(tube(bar), 1, equaliser)
+        glowOn.front.push({ index, segments: [bar] })
+        return index
+      })
+      // a tube down each column's face toward the lane, a flash chasing round them
+      const columnNeons = [
+        [-1, -1],
+        [1, -1],
+        [1, 1],
+        [-1, 1],
+      ].map(([sx, sz], i) => {
+        const x = sx * (COLUMN.x - COLUMN.size / 2 - 0.04)
+        const z = sz * BEAM.z
+        const column = [new THREE.Vector3(x, 0.35, z), new THREE.Vector3(x, 3.9, z)]
+        const index = addNeon(tube(column), 3, addSpill(`column ${i + 1}`, x - sx * 0.6, 2.1, z))
+        glowOn.columns.push({ index, segments: [column] })
+        return index
+      })
+      // a ring on the floor round the turntable; its glow is painted on the floor and the turntable's side
+      // at half the others' radiance: it's much closer to everything
+      const floorRingGeometry = new THREE.TorusGeometry(FLOOR_RING, NEON.radius, 8, 128).rotateX(Math.PI / 2).translate(0, NEON.radius, 0)
+      const floorRing = addNeon(floorRingGeometry, 0, null, 0.5)
+
+      const neonColours = neons.map(() => new THREE.Color())
+      const neonColour = uniformArray(neonColours, 'color')
+      const neonMaterial = new THREE.MeshBasicNodeMaterial({ name: 'neon' })
+      // brightest along the middle of the tube as seen, like the glass's glowing gas
+      const facing = abs(normalView.dot(positionViewDirection))
+      neonMaterial.colorNode = neonColour.element(int(attribute('neon', 'float').add(0.5))).mul(facing.mul(0.5).add(0.5))
+      const neonMesh = new THREE.Mesh(mergeGeometries(neonParts), neonMaterial)
+      neonMesh.name = 'neons'
+      scene.add(neonMesh)
+
+      // The neons' glow on the surface they're mounted on: bright close to the tube, a faint wash further out, times the
+      // surface's own colour
+      const toSegment = (p, [a, b]) => {
+        const ab = b.clone().sub(a)
+        const along = p.sub(vec3(a)).dot(vec3(ab)).div(ab.lengthSq()).clamp(0, 1)
+        return p.sub(vec3(a).add(vec3(ab).mul(along))).length()
+      }
+      const glow = (shapes) =>
+        shapes
+          .map(({ index, segments, ring, inset = 0 }) => {
+            const p = positionWorld
+            let distance = ring
+              ? length(vec2(length(p.zy.sub(vec2(ring.z, ring.y))).sub(ring.radius), p.x.add(HALF - 0.08)))
+              : segments.map((segment) => toSegment(p, segment)).reduce((a, b) => a.min(b))
+            if (inset > 0) distance = distance.sub(inset).max(0)
+            return neonColour.element(index).mul(exp(distance.div(0.09).pow(2).negate()).mul(0.12).add(exp(distance.div(0.45).negate()).mul(0.02)))
+          })
+          .reduce((a, b) => a.add(b))
+      // only the wall a fragment is on pays for its neons
+      walls.emissiveNode = Fn(() => {
+        const result = vec3(0).toVar()
+        If(positionWorld.x.lessThan(-HALF + 0.01), () => {
+          result.assign(glow(glowOn.left))
+        })
+          .ElseIf(positionWorld.x.greaterThan(HALF - 0.01), () => {
+            result.assign(glow(glowOn.right))
+          })
+          .ElseIf(positionWorld.z.greaterThan(HALF - 0.01), () => {
+            result.assign(glow(glowOn.front))
+          })
+        return result
+      })().mul(walls.colorNode)
+      columns.emissiveNode = glow(glowOn.columns).mul(columns.colorNode)
+
+      // Daylight through the open door, for the garage's surfaces alone: the figure gets it through the capture
+      const DAYLIGHT = 1.6
+      const daylight = new THREE.RectAreaLight('#dfe4ea', 0, DOOR.width, DOOR.height)
+      daylight.position.set(0, DOOR.height / 2, -HALF)
+      daylight.lookAt(0, DOOR.height / 2, 0)
+      scene.add(daylight)
+
+      const luminance = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+      const share = new THREE.Color()
+      function applyLights() {
+        doorPanel.scale.y = Math.max(1 - params.door, 1e-3)
+        doorPanel.visible = params.door < 0.999
+        doorRolled.value = params.door * DOOR.height
+        // the doorway's open part, from the floor up
+        daylight.height = Math.max(DOOR.height * params.door, 0.01)
+        daylight.position.y = daylight.height / 2
+        daylight.intensity = params.door > 0.001 ? DAYLIGHT : 0
+        for (const [i, { colour, level, gain }] of neons.entries()) {
+          neonColours[i].copy(colour).multiplyScalar((level * gain * NEON.luminance * params.neons) / luminance(colour))
+        }
+        floorRingGlow.value.copy(neonColours[floorRing])
+        // each spill as bright as its tubes are long
+        for (const { light, members } of spills) {
+          light.color.setRGB(0, 0, 0)
+          for (const i of members) light.color.add(share.copy(neonColours[i]).multiplyScalar(neons[i].length))
+        }
+      }
+
+      // The cycle: the neons change palette every 8 beats, dipping out and back in round the change; a flash chases
+      // round the columns; the equaliser's level swings; and every 40 s the garage door rolls up on the sun for a while.
+      // Each change takes a few environment refreshes, so the figure keeps up with it.
+      const PALETTES = [
+        ['#ff2bd6', '#19e3ff', '#8f3dff', '#ffd23f'],
+        ['#ff3355', '#ff9a1f', '#ff2bd6', '#fff0d0'],
+        ['#2f6bff', '#19e3ff', '#a04dff', '#e8f4ff'],
+        ['#36ff9a', '#ff2bd6', '#19e3ff', '#ffb000'],
+      ].map((palette) => palette.map((hex) => new THREE.Color(hex)))
+      const BEAT = 60 / 124 // s
+      function cycle(t) {
+        const beats = t / BEAT + 2 // starting mid-palette
+        const into = beats % 8
+        const palette = PALETTES[Math.floor(beats / 8) % PALETTES.length]
+        const dip = THREE.MathUtils.smoothstep(into, 0, 1) * (1 - THREE.MathUtils.smoothstep(into, 7, 8))
+        for (const neon of neons) {
+          neon.colour.copy(palette[neon.slot])
+          neon.level = dip
+        }
+        const height = 2.5 + 2.5 * Math.sin(beats * 0.9) * Math.sin(beats * 0.37 + 1)
+        bars.forEach((index, i) => (neons[index].level *= THREE.MathUtils.clamp(height - Math.abs(i - 2) * 1.2, 0.05, 1)))
+        // a column every 2 beats, each fading over the next 2
+        columnNeons.forEach((index, i) => (neons[index].level *= 0.12 + 0.88 * Math.exp(-((beats / 2 - i + 4) % 4) * 1.6)))
+        const phase = (t + 10) % 40
+        params.door = THREE.MathUtils.smoothstep(phase, 16, 20) - THREE.MathUtils.smoothstep(phase, 32, 36)
+      }
+
+      // ---- The turntable and the figure on it ----
+
+      const TOP = 0.12 // the turntable's top
+      const turntable = new THREE.Group()
+      turntable.name = 'turntable'
+      scene.add(turntable)
+      const deck = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.62, 0.64, TOP, 96).translate(0, TOP / 2, 0),
+        roomMaterial({ name: 'turntable', color: '#d6d0c6', roughness: 0.5 }),
+      )
+      // the floor ring's light on the deck's side, painted on
+      const outward = positionWorld.xz.div(length(positionWorld.xz).max(1e-3))
+      deck.material.emissiveNode = floorRingGlow.mul(normalWorld.xz.dot(outward).max(0).mul(0.012))
+      deck.name = 'turntable deck'
+      deck.castShadow = deck.receiveShadow = true
+      turntable.add(deck)
+
+      const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder)
+      const loading = document.querySelector('loading-screen')
+      const trooper = await loading.track((onProgress) => loader.loadAsync('models/star-wars-7-storm-trooper.glb', onProgress))
+
+      // The figure: a stormtrooper standing on the turntable, its torso over the axis
+      const figure = trooper.scene
+      figure.name = 'figure'
+      figure.position.y = TOP
+      const figureMeshes = []
+      figure.traverse((child) => {
+        if (!child.isMesh) return
+        child.castShadow = child.receiveShadow = true
+        figureMeshes.push(child)
+      })
+      turntable.add(figure)
+      turntable.rotation.y = 2.124
+
+      // Turning the figure by dragging the turntable's deck: a drag across the canvas's height turns it once, its near side
+      // following the pointer, and orbiting sits the drag out. The cursor reads `grab` over the deck, `grabbing` while held.
+      {
+        const canvas = renderer.domElement
+        const raycaster = new THREE.Raycaster()
+        const pointer = new THREE.Vector2()
+        let drag = null // the pointer's id, its x at the press and the turntable's rotation then
+        const overDeck = (event) => {
+          const rect = canvas.getBoundingClientRect()
+          pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, 1 - ((event.clientY - rect.top) / rect.height) * 2)
+          raycaster.setFromCamera(pointer, camera)
+          return raycaster.intersectObject(deck, false).length > 0
+        }
+        // in the capture phase, ahead of OrbitControls' listener, which ignores a press while disabled
+        canvas.addEventListener(
+          'pointerdown',
+          (event) => {
+            if (drag !== null || event.button !== 0 || !overDeck(event)) return
+            controls.enabled = false
+            canvas.setPointerCapture(event.pointerId)
+            drag = { id: event.pointerId, x: event.clientX, rotation: turntable.rotation.y }
+            canvas.style.cursor = 'grabbing'
+          },
+          { capture: true },
+        )
+        canvas.addEventListener('pointermove', (event) => {
+          if (drag === null) {
+            // a mouse hovering, not orbiting
+            if (event.pointerType === 'mouse' && event.buttons === 0) canvas.style.cursor = overDeck(event) ? 'grab' : ''
+            return
+          }
+          if (event.pointerId !== drag.id) return
+          turntable.rotation.y = drag.rotation + ((event.clientX - drag.x) / canvas.clientHeight) * Math.PI * 2
+        })
+        const release = (event) => {
+          if (drag === null || event.pointerId !== drag.id) return
+          drag = null
+          if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId)
+          controls.enabled = true
+          canvas.style.cursor = event.pointerType === 'mouse' && overDeck(event) ? 'grab' : ''
+        }
+        canvas.addEventListener('pointerup', release)
+        canvas.addEventListener('pointercancel', release)
+      }
+
+      // Lit by the environment, and directly by the sun alone: everything else that lights it is in the capture.
+      // `armour` is the model's own textured materials; `chrome` paints its white plates `body` and the rest `joints`.
+      const DARK_PARTS = ['undersuit', 'belt', 'hands-feet', 'blaster']
+      const FINISHES = {
+        armour: null,
+        chrome: { body: ['#e6e8ec', 1, 0.06], joints: ['#202124', 0, 0.55] },
+      }
+      const body = new THREE.MeshPhysicalNodeMaterial({ name: 'figure body' })
+      const joints = new THREE.MeshPhysicalNodeMaterial({ name: 'figure joints' })
+      // the loaded materials as node materials, so the light and context nodes set on them are the ones drawn
+      const ownMaterials = new Map(
+        figureMeshes.map(({ material: source }) => {
+          const { name, color, map, normalMap, normalScale, roughness, metalness } = source
+          const material = new THREE.MeshPhysicalNodeMaterial({ name, color, map, normalMap, normalScale, roughness, metalness })
+          return [source.name, material]
+        }),
+      )
+      const isDark = (mesh) => DARK_PARTS.includes(mesh.userData.part)
+      for (const mesh of figureMeshes) mesh.userData.part = mesh.material.name
+      const figureMaterials = [body, joints, ...ownMaterials.values()]
+      for (const material of figureMaterials) material.lightsNode = lights([sun])
+      function setFinish() {
+        const finish = FINISHES[params.finish]
+        for (const mesh of figureMeshes) {
+          mesh.material = finish === null ? ownMaterials.get(mesh.userData.part) : isDark(mesh) ? joints : body
+        }
+        if (finish === null) return
+        for (const [material, [hex, metalness, roughness]] of [
+          [body, finish.body],
+          [joints, finish.joints],
+        ]) {
+          material.color.set(hex)
+          material.metalness = metalness
+          material.roughness = roughness
+        }
+      }
+      setFinish()
+
+      // ---- The environment: a sliced PMREM for the specular, an irradiance probe column for the diffuse ----
+
+      const CAPTURE = { near: 0.05, far: 100, size: 256, position: new THREE.Vector3(0, 1.05, 0) }
+      const generator = new SlicedPMREMGenerator(renderer, { samples: params.prefilter || null })
+      let probes = null
+      let probesHelper = null
+      const probeHeights = (count) =>
+        count === 1 ? [1.05] : Array.from({ length: count }, (_, i) => 0.3 + (1.45 * i) / (count - 1))
+
+      // Captured from the figure's axis, without the figure or the probe spheres in it
+      function capturing(run) {
+        figure.visible = false
+        const helperShown = probesHelper?.visible
+        if (probesHelper) probesHelper.visible = false
+        run()
+        figure.visible = true
+        if (probesHelper) probesHelper.visible = helperShown
+      }
+
+      function setDiffuse() {
+        for (const material of figureMaterials) {
+          material.contextNode = params.diffuse === 'probes' ? probes.irradianceContext : null
+          material.needsUpdate = true
+        }
+      }
+
+      // A column of a new count: its helper replaces the old one, and the figure's materials rebuild on it
+      function setProbes() {
+        cancelRefresh()
+        if (probes !== null) {
+          probesHelper.removeFromParent()
+          probesHelper.dispose()
+          probes.removeFromParent()
+          probes.dispose()
+        }
+        // 128² faces: a neon tube across the garage is about a texel wide there, half a texel at 64²
+        probes = new IrradianceProbeColumn(probeHeights(params.probes), { near: CAPTURE.near, far: CAPTURE.far, size: 128, windowing: 1 })
+        probes.name = 'irradiance probes'
+        scene.add(probes)
+        probesHelper = new IrradianceProbeColumnHelper(probes, { radius: 0.07 })
+        // drawn through the figure the probes sit in
+        probesHelper.traverse((child) => {
+          if (!child.isMesh) return
+          child.material.depthTest = false
+          child.material.depthWrite = false
+          child.renderOrder = 10
+        })
+        probesHelper.visible = params.showProbes
+        scene.add(probesHelper)
+        capturing(() => probes.update(renderer, scene))
+        setDiffuse()
+      }
+
+      // A refresh: the PMREM job's slices, then each probe's faces a few at a time, then the swap into what the materials
+      // read, the PMREM copied texel for texel and the probes projected. One slice a frame.
+      const refresh = { job: null, faces: 0, probeSlice: 0, probeSlices: 0 }
+      function cancelRefresh() {
+        refresh.job?.cancel()
+        refresh.job = null
+      }
+      function refreshSlice(live) {
+        if (refresh.job === null) {
+          refresh.faces = params.facesPerSlice
+          refresh.job = generator.fromSceneSliced(scene, {
+            ...CAPTURE,
+            facesPerSlice: params.facesPerSlice,
+            lodsPerSlice: params.levelsPerSlice,
+          })
+          refresh.probeSlice = 0
+          refresh.probeSlices = probes.count * Math.ceil(6 / refresh.faces)
+          params.framesPerRefresh = refresh.job.slices + refresh.probeSlices + 1
+        }
+        const { job, faces } = refresh
+        capturing(() => {
+          if (!job.done) {
+            job.step()
+          } else if (refresh.probeSlice < refresh.probeSlices) {
+            const perProbe = Math.ceil(6 / faces)
+            const slice = refresh.probeSlice++
+            const first = (slice % perProbe) * faces
+            probes.capture(renderer, scene, Math.floor(slice / perProbe), { faces: [first, Math.min(first + faces, 6)] })
+          } else {
+            job.copyTo(live)
+            probes.project(renderer)
+            refresh.job = null
+          }
+        })
+      }
+      // A whole refresh in one frame: the PMREM straight into what the materials read, then every probe
+      function refreshWhole(live) {
+        cancelRefresh()
+        params.framesPerRefresh = 1
+        capturing(() => {
+          generator.fromSceneSliced(scene, { ...CAPTURE, facesPerSlice: 6, lodsPerSlice: 6, renderTarget: live }).finish()
+          probes.update(renderer, scene)
+        })
+      }
+      // A refresh in two frames: the PMREM into the back target, then every probe and the swap of both
+      function refreshInTwo(live) {
+        params.framesPerRefresh = 2
+        capturing(() => {
+          if (refresh.job === null) {
+            refresh.job = generator.fromSceneSliced(scene, { ...CAPTURE, facesPerSlice: 6, lodsPerSlice: 6 }).finish()
+          } else {
+            probes.update(renderer, scene)
+            refresh.job.copyTo(live)
+            refresh.job = null
+          }
+        })
+      }
+      const refreshes = { sliced: refreshSlice, 'two frames': refreshInTwo, 'every frame': refreshWhole }
+
+      // ---- First light: the room captured three times, each seeing the walls lit by the one before ----
+
+      // the room lit by the sun, the neons' spill and the daylight; the figure by the sun alone
+      const roomLights = lights([sun, daylight, ...spills.map(({ light }) => light)])
+      for (const material of roomMaterials) material.lightsNode = roomLights
+      cycle(0)
+      applyLights()
+      await loading.stage('Lighting the garage…')
+      let live = null
+      capturing(() => {
+        live = generator.fromScene(scene, 0, CAPTURE.near, CAPTURE.far, { size: CAPTURE.size, position: CAPTURE.position })
+      })
+      for (const material of [...roomMaterials, ...figureMaterials]) {
+        material.envMap = live.texture
+        material.envMapIntensity = roomMaterials.includes(material) ? params.bounce : 1
+        material.needsUpdate = true
+      }
+      for (let i = 0; i < 2; i++) {
+        capturing(() => {
+          generator.fromScene(scene, 0, CAPTURE.near, CAPTURE.far, { size: CAPTURE.size, position: CAPTURE.position, renderTarget: live })
+        })
+      }
+      setProbes()
+
+      // ---- Post-processing: TAAU anti-aliases, a light bloom on the emitters ----
+
+      const scenePass = pass(scene, camera, { samples: 0 })
+      scenePass.setMRT(mrt({ output, velocity }))
+      const velocityTexture = scenePass.getTexture('velocity') // RG16F
+      velocityTexture.type = THREE.HalfFloatType
+      velocityTexture.format = THREE.RGFormat
+      const taauNode = taau(scenePass.getTextureNode('output'), scenePass.getTextureNode('depth'), scenePass.getTextureNode('velocity'), camera)
+      const resolved = taauNode.getTextureNode()
+      const bloomNode = bloom(resolved, { strength: 0.12, radius: 0.15, threshold: 1.6, smoothWidth: 1.2 })
+      const pipeline = new THREE.RenderPipeline(renderer)
+      pipeline.outputColorTransform = false
+      pipeline.outputNode = renderOutput(vec4(resolved.rgb.add(bloomNode.rgb), 1))
+
+      // The scene pass at renderPixelRatio, which TAAU upscales to the output's pixel ratio; bloom reads TAAU's output.
+      const sceneScale = () => Math.min(1, params.renderPixelRatio / renderer.getPixelRatio())
+      function setSampling() {
+        scenePass.setResolutionScale(sceneScale())
+      }
+      // The output's pixel ratio, and the scene's share of it: a move to another display changes the device's.
+      function setPixelRatio() {
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO))
+        setSampling()
+      }
+      setSampling()
+      window.addEventListener('resize', setPixelRatio)
+
+      // ---- GUI ----
+
+      const gui = new GUI({ title: 'Environment lighting' })
+      if (window.innerWidth < 600) gui.close()
+      gui.add(params, 'live').name('live updates')
+      gui.add(params, 'diffuse', ['probes', 'PMREM']).name('figure diffuse').onChange(setDiffuse)
+      gui.add(params, 'probes', 1, 5, 1).name('probe count').onFinishChange(setProbes)
+      gui.add(params, 'showProbes').name('show probes').onChange((value) => (probesHelper.visible = value))
+      gui.add(params, 'refresh', Object.keys(refreshes)).onChange(cancelRefresh)
+      gui.add(params, 'facesPerSlice', 1, 6, 1).name('faces per slice')
+      gui.add(params, 'levelsPerSlice', 1, 6, 1).name('levels per slice')
+      gui
+        .add(params, 'prefilter', { "three's": 0, '32 samples': 32, '64 samples': 64, '128 samples': 128 })
+        .onChange((value) => {
+          generator.samples = value || null
+          cancelRefresh()
+        })
+      gui.add(params, 'framesPerRefresh').name('frames per refresh').disable().listen()
+      gui.add(camera, 'fov', 20, 90, 1).onChange(() => camera.updateProjectionMatrix())
+      // Logs the current view as code for the page's start, the turntable's turn with it, and copies it
+      const view = {
+        log() {
+          const xyz = (vector) => vector.toArray().map((value) => +value.toFixed(3)).join(', ')
+          const code = [
+            `camera.position.set(${xyz(camera.position)})`,
+            `controls.target.set(${xyz(controls.target)})`,
+            `turntable.rotation.y = ${+THREE.MathUtils.euclideanModulo(turntable.rotation.y, Math.PI * 2).toFixed(3)}`,
+            `fov: ${camera.fov}`,
+          ].join('\n')
+          console.log(code)
+          navigator.clipboard?.writeText(code).catch(() => {})
+        },
+      }
+      gui.add(view, 'log').name('log view')
+      const lightsFolder = gui.addFolder('Lights')
+      lightsFolder.add(params, 'animate').name('cycle')
+      lightsFolder.add(params, 'door', 0, 1, 0.01).name('garage door').listen()
+      lightsFolder.add(params, 'neons', 0, 2, 0.01).name('neon brightness')
+      const sceneFolder = gui.addFolder('Scene')
+      sceneFolder.add(params, 'finish', Object.keys(FINISHES)).name('figure finish').onChange(setFinish)
+      sceneFolder.add(params, 'spin', 0, 12, 0.1).name('turntable (turns/min)')
+      sceneFolder
+        .add(params, 'bounce', 0, 1, 0.01)
+        .name('room bounce')
+        .onChange((value) => roomMaterials.forEach((material) => (material.envMapIntensity = value)))
+      sceneFolder.add(params, 'exposure', 0.2, 3, 0.01).onChange((value) => (renderer.toneMappingExposure = value))
+      const resolutionFolder = gui.addFolder('Resolution')
+      resolutionFolder.add(params, 'renderPixelRatio', RENDER_PIXEL_RATIOS).name('render pixel ratio').onChange(setSampling)
+
+      // ---- Loop ----
+
+      const timer = new THREE.Timer()
+      timer.connect(document)
+      let cycleTime = 0
+      await loading.stage('Compiling shaders…') // shown before the first frame's shader build blocks the page
+      renderer.setAnimationLoop((time) => {
+        timer.update(time)
+        const delta = Math.min(timer.getDelta(), 1 / 20)
+        if (params.animate) {
+          cycleTime += delta
+          cycle(cycleTime)
+        }
+        applyLights()
+        turntable.rotation.y += delta * (params.spin / 60) * Math.PI * 2
+        controls.update(delta)
+        sun.shadow.needsUpdate = true
+        pipeline.render()
+        if (params.live) refreshes[params.refresh](live)
+        stats.update()
+        renderer.resolveTimestampsAsync('compute')
+        renderer.resolveTimestampsAsync('render')
+      })
+      // off once the scene has drawn: its shaders compile on the first frame, behind the loading screen
+      loading.done()
+    </script>
+  </body>
+</html>

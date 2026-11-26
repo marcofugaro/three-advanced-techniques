@@ -1,0 +1,886 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Precomputed Lighting</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #c3b6a6;
+      }
+      canvas {
+        display: block;
+        touch-action: none;
+      }
+      /* The bake's progress, under the scene as it lands */
+      #bake-progress {
+        position: fixed;
+        left: 50%;
+        bottom: 32px;
+        width: min(320px, calc(100vw - 32px));
+        transform: translateX(-50%);
+        color: #3b342d;
+        font: 12px/1.4 system-ui, sans-serif;
+        text-align: center;
+        pointer-events: none;
+      }
+      #bake-progress[hidden] {
+        display: none;
+      }
+      #bake-progress .track {
+        height: 2px;
+        margin-bottom: 8px;
+        background: color-mix(in srgb, #3b342d 20%, transparent);
+      }
+      #bake-progress .bar {
+        width: 0;
+        height: 100%;
+        background: #3b342d;
+        transition: width 0.2s;
+      }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.webgpu.js",
+          "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.webgpu.js",
+          "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.tsl.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/",
+          "three-mesh-bvh": "https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.9.15/build/index.module.js",
+          "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.21.0/dist/lil-gui.esm.js",
+          "stats-gl": "https://cdn.jsdelivr.net/npm/stats-gl@4.2.3/dist/main.js"
+        }
+      }
+    </script>
+    <script src="../../utils/loading.js"></script>
+  </head>
+  <body>
+    <loading-screen style="--background: #c3b6a6; --color: #3b342d"></loading-screen>
+    <div id="bake-progress" hidden>
+      <div class="track"><div class="bar"></div></div>
+      <span class="stage"></span>
+    </div>
+    <script type="module">
+      import * as THREE from 'three/webgpu'
+      import {
+        attribute,
+        color,
+        diffuseColor,
+        float,
+        fwidth,
+        max,
+        mix,
+        mrt,
+        mx_fractal_noise_float,
+        mx_noise_float,
+        output,
+        pass,
+        positionLocal,
+        reference,
+        renderOutput,
+        select,
+        smoothstep,
+        storage,
+        texture,
+        uniform,
+        uv,
+        varying,
+        vec2,
+        vec3,
+        vec4,
+        velocity,
+      } from 'three/tsl'
+      import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+      import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+      import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
+      import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
+      import GUI from 'lil-gui'
+      import Stats from 'stats-gl'
+      import { taau } from '../taau/TAAUNode.js'
+      import { RectAreaLightShadow } from '../area-light/RectAreaLightShadow.js'
+      import { VISIBILITY_MASKS_FORMAT, SelfShadowVisibilityMasks } from './SelfShadowVisibilityMasks.js'
+      import { SelfShadowRadianceTransfer, RADIANCE_TRANSFER_FORMAT } from './SelfShadowRadianceTransfer.js'
+      import { PrecomputedRadiosity, TRANSFER_VERSION } from './PrecomputedRadiosity.js'
+      import { PrecomputedAmbientOcclusion } from './PrecomputedAmbientOcclusion.js'
+      import { ContactOcclusion } from './ContactOcclusion.js'
+      import { CLUSTERED_KERNEL_FORMAT } from './utils/SurfaceDiffusion.js'
+      import { BakeFile, hashArrays } from '../../utils/bakeFile.js'
+
+      // ---- A plaster statuette on a turntable in a sand-coloured studio, under two soft boxes ----
+
+      const BACKGROUND = new THREE.Color('#c3b6a6')
+
+      const params = {
+        // 'masks' (SelfShadowVisibilityMasks), 'precomputed radiance transfer' (SelfShadowRadianceTransfer) or 'off'
+        selfShadow: 'masks',
+        // the masks' spread while the statuette turns: 'clustered kernel' or 'steps'
+        motionSpread: 'clustered kernel',
+        transferRays: 256,
+        bounce: true,
+        castShadow: true,
+        occlusion: true,
+        // the floor's and the platter's, baked in the turntable's frame: right while the statuette turns about y alone
+        contactOcclusion: true,
+        turntable: 0.1, // rad/s
+        bounces: 2,
+        softness: 1.5, // cm
+        key: 100,
+        fill: 5,
+        lightsTurn: 180, // °, both lights about the turntable's vertical axis
+        animateLights: false, // turns them on, as the turntable turns
+        lightsSpeed: 60, // °/s
+        exposure: 1,
+        fov: 30, // degrees, vertical
+        // Resolution, as worm-monster's desktop tier: the scene's pixels per CSS pixel, one of RENDER_PIXEL_RATIOS,
+        // which TAAU upscales to the output's
+        renderPixelRatio: 1,
+      }
+      const RENDER_PIXEL_RATIOS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
+      const MAX_PIXEL_RATIO = 2 // the output's pixels per CSS pixel at most
+
+      const loading = document.querySelector('loading-screen')
+      const renderer = new THREE.WebGPURenderer({ antialias: false }) // TAAU anti-aliases
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO))
+      renderer.setSize(window.innerWidth, window.innerHeight)
+      renderer.toneMapping = THREE.AgXToneMapping
+      renderer.toneMappingExposure = params.exposure
+      document.body.appendChild(renderer.domElement)
+      await renderer.init()
+
+      // The GPU's render passes, and in CPT the computes: the masks, the transfer, the bounce
+      const timestamps = renderer.hasFeature('timestamp-query')
+      const stats = new Stats({ trackGPU: timestamps, trackCPT: timestamps })
+      document.body.appendChild(stats.dom)
+      stats.init(renderer)
+
+      const scene = new THREE.Scene()
+      scene.background = BACKGROUND
+      scene.fog = new THREE.Fog(BACKGROUND, 7, 22)
+
+      // A dim room for the ambient fill and the reflections: the soft boxes are the light
+      const pmrem = new THREE.PMREMGenerator(renderer)
+      scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
+      scene.environmentIntensity = 0.1
+      pmrem.dispose()
+
+      const camera = new THREE.PerspectiveCamera(params.fov, window.innerWidth / window.innerHeight, 0.1, 60)
+      const controls = new OrbitControls(camera, renderer.domElement)
+      controls.target.set(0.011, 0.248, 0.024)
+      controls.enableDamping = true
+      controls.maxPolarAngle = THREE.MathUtils.degToRad(84)
+      camera.position.set(0.594, 0.623, 1.495)
+      // A narrow screen backs off to keep the statuette and its shadows in view
+      const halfWidth = Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect)
+      const offset = camera.position.clone().sub(controls.target)
+      offset.setLength(THREE.MathUtils.clamp(0.5 / Math.tan(halfWidth), offset.length(), 9))
+      camera.position.copy(controls.target).add(offset)
+      controls.update()
+
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight
+        camera.updateProjectionMatrix()
+        renderer.setSize(window.innerWidth, window.innerHeight)
+      })
+
+      // Two soft boxes, placed as a small warm key high on the right and a broad cool fill low on the left, then turned
+      // by lightsTurn about the turntable's vertical axis through its centre, the origin, by the right-hand rule; each
+      // stays aimed at a point on that axis.
+      const TURNTABLE_AXIS = new THREE.Vector3(0, 1, 0)
+      const LIGHTS_TARGET = new THREE.Vector3(0, 0.35, 0)
+      const key = new THREE.RectAreaLight('#fff1e0', params.key, 0.6, 0.6)
+      const fill = new THREE.RectAreaLight('#dce8ff', params.fill, 1.6, 1.2)
+      const lightPlacements = [
+        [key, new THREE.Vector3(1.4, 3, 0.8)],
+        [fill, new THREE.Vector3(-2.2, 1.3, 1.6)],
+      ]
+      function turnLights(degrees) {
+        for (const [light, position] of lightPlacements) {
+          light.position.copy(position).applyAxisAngle(TURNTABLE_AXIS, THREE.MathUtils.degToRad(degrees))
+          light.lookAt(LIGHTS_TARGET)
+        }
+      }
+      turnLights(params.lightsTurn)
+      scene.add(key, fill)
+      const LIGHTS = [key, fill]
+
+      // ---- The turntable: a fixed drum on a recessed toe-kick, a bearing reveal, an aluminium platter that turns ----
+
+      // m: the radii and heights of the profile; TOP is the platter's surface, where the statuette stands
+      const TOE = { radius: 0.248, height: 0.016 }
+      const DRUM = { radius: 0.272, height: 0.078 }
+      const HUB = { radius: 0.24, height: 0.084 }
+      const PLATTER = 0.304
+      const TOP = 0.112
+      const FILLET = 0.003
+
+      // A surface of revolution about +y from [radius, height, normal radius, normal height] points, each normal on the
+      // right of the direction the profile runs
+      function revolve(profile, segments = 160) {
+        const positions = []
+        const normals = []
+        const index = []
+        for (let s = 0; s <= segments; s++) {
+          const angle = (s / segments) * Math.PI * 2
+          const [sin, cos] = [Math.sin(angle), Math.cos(angle)]
+          for (const [r, y, nr, ny] of profile) {
+            positions.push(r * sin, y, r * cos)
+            normals.push(nr * sin, ny, nr * cos)
+          }
+        }
+        const n = profile.length
+        for (let s = 0; s < segments; s++) {
+          for (let p = 0; p < n - 1; p++) {
+            const a = s * n + p
+            const b = a + n
+            index.push(a, b, b + 1, a, b + 1, a + 1)
+          }
+        }
+        const geometry = new THREE.BufferGeometry()
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+        geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3))
+        geometry.setIndex(index)
+        return geometry
+      }
+      // A rounded corner's points, about (r, y), from angle a0 to a1 (0 along +r, π/2 along +y)
+      const fillet = (r, y, a0, a1, steps = 6) =>
+        Array.from({ length: steps + 1 }, (_, k) => {
+          const a = a0 + ((a1 - a0) * k) / steps
+          const [nr, ny] = [Math.cos(a), Math.sin(a)]
+          return [r + FILLET * nr, y + FILLET * ny, nr, ny]
+        })
+      const UP = [0, 1]
+      const DOWN = [0, -1]
+      const OUT = [1, 0]
+
+      const turntable = new THREE.Group()
+      turntable.name = 'turntable'
+      turntable.rotation.y = 0.4
+      scene.add(turntable)
+      // The drum and its toe-kick stand still; the platter's rim turns with the statuette
+      const drum = new THREE.Mesh(
+        revolve([
+          [DRUM.radius - FILLET, TOE.height, ...DOWN],
+          ...fillet(DRUM.radius - FILLET, TOE.height + FILLET, -Math.PI / 2, 0),
+          ...fillet(DRUM.radius - FILLET, DRUM.height - FILLET, 0, Math.PI / 2),
+          [HUB.radius, DRUM.height, ...UP],
+        ]),
+        new THREE.MeshStandardNodeMaterial({ name: 'powder coat', color: '#2b2927', roughness: 0.5 }),
+      )
+      const recess = new THREE.MeshStandardNodeMaterial({ name: 'recess', color: '#121110', roughness: 0.8 })
+      const toe = new THREE.Mesh(
+        revolve([
+          [TOE.radius, 0, ...OUT],
+          [TOE.radius, TOE.height, ...OUT],
+        ]),
+        recess,
+      )
+      const hub = new THREE.Mesh(
+        revolve([
+          [HUB.radius, DRUM.height, ...OUT],
+          [HUB.radius, HUB.height, ...OUT],
+        ]),
+        recess,
+      )
+      drum.name = 'drum'
+      scene.add(drum, toe, hub)
+      const rim = new THREE.Mesh(
+        revolve([
+          [HUB.radius, HUB.height, ...DOWN],
+          ...fillet(PLATTER - FILLET, HUB.height + FILLET, -Math.PI / 2, 0),
+          ...fillet(PLATTER - FILLET, TOP - FILLET, 0, Math.PI / 2),
+          [PLATTER - FILLET, TOP, ...UP],
+        ]),
+        new THREE.MeshStandardNodeMaterial({ name: 'aluminium', color: '#d4d4d2', metalness: 1, roughness: 0.3 }),
+      )
+      rim.name = 'platter rim'
+      turntable.add(rim)
+
+      // ---- The statuette: a plaster cast of a scanned dragon, drawn dense and baked on a lighter copy ----
+
+      const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder)
+      const gltf = await loading.track((onProgress) => loader.loadAsync('./models/dragon.glb', onProgress))
+      gltf.scene.updateMatrixWorld()
+      // Float attributes in the statuette's frame: the loader keeps quantized ones and folds their scale into the node
+      function toFloat(name, extra = {}) {
+        const source = gltf.scene.getObjectByName(name)
+        const result = new THREE.BufferGeometry()
+        const copy = (from, ArrayType) => {
+          const array = new ArrayType(from.count * from.itemSize)
+          for (let i = 0; i < from.count; i++) {
+            for (let c = 0; c < from.itemSize; c++) array[i * from.itemSize + c] = from.getComponent(i, c)
+          }
+          return new THREE.BufferAttribute(array, from.itemSize)
+        }
+        result.setAttribute('position', copy(source.geometry.attributes.position, Float32Array))
+        result.setAttribute('normal', copy(source.geometry.attributes.normal, Float32Array))
+        result.setIndex(source.geometry.index)
+        result.applyMatrix4(source.matrixWorld)
+        for (const [to, [from, ArrayType]] of Object.entries(extra)) {
+          result.setAttribute(to, copy(source.geometry.attributes[from], ArrayType))
+        }
+        return result
+      }
+      // Each drawn vertex's closest triangle on the lighting mesh: its three vertices and the first two's weights
+      const geometry = toFloat('dragon-mesh', { lighting: ['_lighting', Uint32Array], weights: ['_weights', Float32Array] })
+      const lightingGeometry = toFloat('dragon-lighting-mesh')
+      const count = lightingGeometry.attributes.position.count
+      // The ambient occlusion per drawn vertex, baked below
+      const occlusion = new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count).fill(1), 1)
+      geometry.setAttribute('occlusion', occlusion)
+
+      // Each listed RectAreaLight's colour × intensity × its visibility node, in place of the realtime shadow its light
+      // carries to every other surface; the others as three shades them
+      class MaskedLightingModel extends THREE.PhysicalLightingModel {
+        constructor(visibility) {
+          super()
+          this.visibility = visibility
+        }
+        directRectArea(input, builder) {
+          const { light } = input.lightNode
+          const visible = this.visibility.get(light)
+          if (!visible) return super.directRectArea(input, builder)
+          const lightColor = uniform(light.color).mul(reference('intensity', 'float', light)).mul(visible)
+          super.directRectArea({ ...input, lightColor }, builder)
+        }
+      }
+
+      const occlusionAmount = uniform(1)
+      const bounceAmount = uniform(1)
+
+      // The masks and the radiosity work on the lighting mesh, which turns with the drawn one
+      const lightingMesh = new THREE.Mesh(lightingGeometry)
+      lightingMesh.visible = false
+      const masks = new SelfShadowVisibilityMasks(lightingMesh, LIGHTS, { softness: params.softness / 100 })
+      // What the masks are traced with, in the bake file's key
+      const MASKS_BAKE = { resolution: 64, tMin: 1e-5 }
+      // The same self-shadow in order-4 spherical harmonics, as the area-light astronaut's
+      const transfer = new SelfShadowRadianceTransfer(lightingMesh, LIGHTS)
+      // Per lighting vertex, the key's visibility in x and the fill's in y from the technique the GUI picks,
+      // unsaturated: the transfer's ratio overshoots [0, 1] and is saturated once interpolated
+      const SELF_SHADOWS = ['off', 'masks', 'precomputed radiance transfer']
+      const selfShadowMode = uniform(SELF_SHADOWS.indexOf(params.selfShadow))
+      const masksRead = storage(masks.visibility, 'vec4', count).toReadOnly()
+      const transferRead = storage(transfer.visibility, 'vec4', count).toReadOnly()
+      const selfShadowAt = (i) =>
+        select(
+          selfShadowMode.equal(1),
+          masksRead.element(i),
+          select(selfShadowMode.equal(2), transferRead.element(i), vec4(1)),
+        )
+      const PLASTER = new THREE.Color('#e9e3d9')
+      // The light the plaster bounces onto itself: the key and the fill as the self-shadow sees them
+      const radiosity = new PrecomputedRadiosity(lightingMesh, { albedo: PLASTER, bounces: params.bounces })
+      radiosity.irradiance = (position, normal, index) => {
+        const visible = selfShadowAt(index).saturate()
+        const keyLight = radiosity.rectAreaLightIrradiance(key)(position, normal).mul(visible.x)
+        return keyLight.add(radiosity.rectAreaLightIrradiance(fill)(position, normal).mul(visible.y))
+      }
+
+      // Per drawn vertex, a lighting vertex value interpolated at its closest point
+      const corners = attribute('lighting', 'uvec3')
+      const weights = attribute('weights', 'vec2')
+      const interpolate = (at) =>
+        at(corners.x)
+          .mul(weights.x)
+          .add(at(corners.y).mul(weights.y))
+          .add(at(corners.z).mul(weights.x.add(weights.y).oneMinus()))
+      // The self-shadow: the key's visibility in x and the fill's in y
+      const visibility = varying(interpolate(selfShadowAt), 'statuetteVisibility').saturate()
+      const bounce = varying(interpolate((i) => radiosity.getVertexNode('bounce', i)), 'statuetteBounce')
+      const material = new THREE.MeshStandardNodeMaterial({ name: 'plaster', color: PLASTER, roughness: 0.62 })
+      material.setupLightingModel = () =>
+        new MaskedLightingModel(
+          new Map([
+            [key, visibility.x],
+            [fill, visibility.y],
+          ]),
+        )
+      material.aoNode = mix(float(1), attribute('occlusion', 'float'), occlusionAmount)
+      material.emissiveNode = diffuseColor.rgb.mul(bounce).mul(bounceAmount.div(Math.PI))
+      const statuette = new THREE.Mesh(geometry, material)
+      statuette.name = 'statuette'
+      statuette.position.y = TOP
+      statuette.add(lightingMesh)
+      turntable.add(statuette)
+
+      // ---- The studio: a painted muslin sweep behind the turntable, curving up from the floor into a wall ----
+
+      // In the sweep's frame: x across it, z towards the camera's side, the floor ending where the cove starts at z = 0
+      const SWEEP = { azimuth: 0.49, distance: 1.4, cove: 1.2, height: 7, width: 60 }
+      const sweep = new THREE.Group()
+      sweep.name = 'sweep'
+      sweep.rotation.y = SWEEP.azimuth
+      sweep.position.set(-Math.sin(SWEEP.azimuth), 0, -Math.cos(SWEEP.azimuth)).multiplyScalar(SWEEP.distance)
+      scene.add(sweep)
+      sweep.updateMatrixWorld()
+      // The sweep's profile at arc length s from the floor: its [z, y] and normal [nz, ny]
+      const COVE_LENGTH = (Math.PI / 2) * SWEEP.cove
+      const sweepProfile = (s) => {
+        if (s > COVE_LENGTH) return [[-SWEEP.cove, SWEEP.cove + s - COVE_LENGTH], [1, 0]]
+        const t = s / SWEEP.cove
+        return [[-SWEEP.cove * Math.sin(t), SWEEP.cove * (1 - Math.cos(t))], [Math.sin(t), Math.cos(t)]]
+      }
+      const coveGeometry = new THREE.BufferGeometry()
+      {
+        const STEPS = 48
+        const LENGTH = COVE_LENGTH + SWEEP.height - SWEEP.cove
+        const positions = []
+        const normals = []
+        const uvs = []
+        const index = []
+        for (let k = 0; k <= STEPS; k++) {
+          const s = k <= 32 ? (k / 32) * COVE_LENGTH : COVE_LENGTH + ((k - 32) / (STEPS - 32)) * (LENGTH - COVE_LENGTH)
+          const [[z, y], [nz, ny]] = sweepProfile(s)
+          for (const x of [-SWEEP.width / 2, SWEEP.width / 2]) {
+            positions.push(x, y, z)
+            normals.push(0, ny, nz)
+            uvs.push(x, s)
+          }
+          if (k > 0) index.push(2 * k - 2, 2 * k - 1, 2 * k + 1, 2 * k - 2, 2 * k + 1, 2 * k)
+        }
+        coveGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+        coveGeometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3))
+        coveGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)) // x and s, m
+        coveGeometry.setIndex(index)
+      }
+
+      // Painted muslin, as on the other demos' sweeps. p is metres across the sweep and along it from the cove's foot,
+      // negative on the floor: broad clouds of tone and smaller blotches are baked once over the part in view, and the
+      // cloth's tooth is drawn per pixel, fading where it would alias.
+      const PAINT = { x: [-12, 12], s: [-12, 6] }
+      const paintTarget = new THREE.RenderTarget(2048, 1536, {
+        depthBuffer: false,
+        generateMipmaps: true,
+        minFilter: THREE.LinearMipmapLinearFilter,
+        anisotropy: 8,
+      })
+      paintTarget.texture.name = 'muslin paint'
+      const paintMin = vec2(PAINT.x[0], PAINT.s[0])
+      const paintSize = vec2(PAINT.x[1] - PAINT.x[0], PAINT.s[1] - PAINT.s[0])
+      {
+        const p = paintMin.add(uv().mul(paintSize))
+        const clouds = mx_fractal_noise_float(vec3(p.mul(0.45), 4.7), 5, 2, 0.55)
+        const blotches = mx_fractal_noise_float(vec3(p.mul(2.2), 9.3), 3, 2, 0.5)
+        const shade = clouds.mul(0.38).add(blotches.mul(0.1)).add(0.5).saturate()
+        const quad = new THREE.QuadMesh(new THREE.MeshBasicNodeMaterial({ name: 'muslin paint', fragmentNode: vec4(shade, 0, 0, 1) }))
+        renderer.setRenderTarget(paintTarget)
+        quad.render(renderer)
+        renderer.setRenderTarget(null)
+        quad.material.dispose()
+      }
+      // The scene's pixels per output pixel, a side, which setSampling() sets: a scene pixel's footprint × this is an
+      // output pixel's, so the tooth fades as at the output's resolution, whatever the scene's
+      const sceneScaleNode = uniform(1)
+      const muslin = (name, p) => {
+        const aliasing = max(fwidth(p.x), fwidth(p.y)).mul(sceneScaleNode).mul(70) // the tooth's cycles per output pixel
+        const tooth = mx_noise_float(vec3(p.mul(70), 2.2)).mul(smoothstep(0.5, 0.15, aliasing))
+        const shade = texture(paintTarget.texture, p.sub(paintMin).div(paintSize)).r.add(tooth.mul(0.035))
+        const material = new THREE.MeshStandardNodeMaterial({ name, roughness: 0.92 })
+        material.colorNode = mix(color('#b3a38c'), color('#ddd1c0'), smoothstep(0.08, 0.92, shade))
+        return material
+      }
+
+      // ---- Contact occlusion on the floor and the platter: baked once, in the turntable's frame, so it turns with it ----
+
+      // A 2.4 m square of the floor, and the platter's top, its square past the platter's edge so the fade stays off it
+      const floorOcclusion = new ContactOcclusion(turntable, { size: 2.4, resolution: 128, height: 0.001 })
+      const platterSize = 2 * (PLATTER / 0.8 + 0.01)
+      const platterOcclusion = new ContactOcclusion(turntable, {
+        size: platterSize,
+        resolution: 96,
+        height: TOP + 0.001,
+      })
+
+      const floorMaterial = muslin('floor', vec2(positionLocal.x, positionLocal.z.negate()))
+      floorMaterial.aoNode = floorOcclusion.aoNode
+      // a half-disc in front of the cove
+      const floor = new THREE.Mesh(
+        new THREE.CircleGeometry(SWEEP.width / 2, 96, Math.PI, Math.PI).rotateX(-Math.PI / 2),
+        floorMaterial,
+      )
+      floor.name = 'floor'
+      sweep.add(floor)
+
+      const cove = new THREE.Mesh(coveGeometry, muslin('cove', uv()))
+      cove.name = 'cove'
+      sweep.add(cove)
+
+      const platterMaterial = new THREE.MeshStandardNodeMaterial({ name: 'platter', color: '#b8b1a6', roughness: 0.55 })
+      platterMaterial.aoNode = platterOcclusion.aoNode
+      const platterTop = new THREE.Mesh(
+        new THREE.CircleGeometry(PLATTER - FILLET, 160).rotateX(-Math.PI / 2).translate(0, TOP, 0),
+        platterMaterial,
+      )
+      platterTop.name = 'platter top'
+      turntable.add(platterTop)
+
+      // ---- Realtime soft shadows from the soft boxes, on every surface but the statuette, which has its masks ----
+
+      // The statuette and the turntable cast; the sweep, floor and cove, only receives
+      for (const caster of [statuette, rim, platterTop, drum, toe, hub]) caster.castShadow = true
+      const shadows = LIGHTS.map((light) => new RectAreaLightShadow(light))
+
+      // ---- The bakes: read from index.bake beside the page, else baked when the GUI's bake is pressed ----
+
+      // Bumped when a bake's values change for the same inputs, so an older file is never read
+      const BAKE_FORMAT = 1
+      const BAKE_FILE = 'index.bake'
+      const bakeFile = await loading.track((onProgress) =>
+        BakeFile.read(new URL(BAKE_FILE, document.baseURI), { format: BAKE_FORMAT, onProgress }),
+      )
+
+      // The turntable and the statuette at rest, as the baker captures them
+      const atRest = [rim, platterTop, drum, toe, hub].map(({ geometry }) => new THREE.Mesh(geometry))
+      atRest.push(new THREE.Mesh(lightingGeometry).translateY(TOP))
+      atRest.forEach((mesh) => mesh.updateMatrixWorld())
+      // What every bake is traced from, the head of each key
+      const sceneHash = hashArrays(
+        lightingGeometry.attributes.normal.array,
+        ...atRest.flatMap(({ geometry }) => [geometry.attributes.position.array, geometry.index?.array ?? []]),
+      )
+
+      // The masks' motion spread: a clustered kernel per softness, built in workers and kept, the starting softness's
+      // and the latest other's
+      const MOTION_KERNEL = { clusterSize: 2, mass: 0.99 }
+      const startSigma = masks.softness
+      const motionKernels = new Map()
+      function motionKernelFor(sigma, onProgress) {
+        if (!motionKernels.has(sigma)) {
+          for (const kept of motionKernels.keys()) if (kept !== startSigma) motionKernels.delete(kept)
+          const built = masks.diffusion.createKernel(sigma, { ...MOTION_KERNEL, onProgress })
+          motionKernels.set(sigma, built)
+          built.catch(() => motionKernels.delete(sigma))
+        }
+        return motionKernels.get(sigma)
+      }
+      function showMotionKernel(kernel) {
+        if (kernel?.sigma !== startSigma || kernel.mass !== MOTION_KERNEL.mass || !kernel.clusters) {
+          throw new TypeError('built for another softness')
+        }
+        masks.diffusion.checkKernel(kernel)
+        motionKernels.set(startSigma, Promise.resolve(kernel))
+        if (params.motionSpread === 'clustered kernel' && masks.softness === startSigma) masks.motionKernel = kernel
+      }
+
+      // The ambient occlusion on the statuette, and the contact occlusion on the floor and the platter about it
+      const OCCLUSION = {
+        statuette: { rays: 48, maxDistance: 0.3 },
+        floor: { rays: 128, maxDistance: 0.6 },
+        platter: { rays: 128, maxDistance: 0.4 },
+      }
+      let baker = null
+      function showOcclusion({ statuette, floor, platter }) {
+        if (statuette.length !== count) throw new TypeError("not the lighting mesh's")
+        // each drawn vertex's at its closest point on the lighting mesh
+        const [at, w] = [geometry.attributes.lighting.array, geometry.attributes.weights.array]
+        for (let v = 0; v < occlusion.count; v++) {
+          const [a, b, c] = [at[v * 3], at[v * 3 + 1], at[v * 3 + 2]]
+          const [wa, wb] = [w[v * 2], w[v * 2 + 1]]
+          occlusion.array[v] = statuette[a] * wa + statuette[b] * wb + statuette[c] * (1 - wa - wb)
+        }
+        occlusion.needsUpdate = true
+        floorOcclusion.values = floor
+        platterOcclusion.values = platter
+      }
+
+      // Each kind: the key of what it's baked from; bake(progress), which traces it, shows it and resolves to what the
+      // file keeps, reporting its share done; show(value), which shows the file's, throwing where it doesn't fit; and
+      // about its seconds on a Mac mini, all baking at once, which weigh it in the progress bar
+      const bakes = {
+        masks: {
+          key: `${sceneHash}|${VISIBILITY_MASKS_FORMAT}|${MASKS_BAKE.resolution}|${MASKS_BAKE.tMin}`,
+          seconds: 1.5,
+          bake: (progress) => masks.bake(renderer, { ...MASKS_BAKE, onProgress: progress }),
+          show: (data) => (masks.data = data),
+        },
+        transfer: {
+          key: `${sceneHash}|${RADIANCE_TRANSFER_FORMAT}|${params.transferRays}`,
+          seconds: 2.5,
+          bake: (progress) => transfer.bake({ rays: params.transferRays, onProgress: progress }),
+          show: (data) => (transfer.data = data),
+        },
+        radiosity: {
+          key: `${sceneHash}|${TRANSFER_VERSION}|128|2048`,
+          seconds: 3,
+          bake: (progress) => radiosity.bake({ rays: 128, patches: 2048, onProgress: progress }),
+          show: (transport) => radiosity.setTransfer(transport),
+        },
+        occlusion: {
+          key: `${sceneHash}|${JSON.stringify(OCCLUSION)}`,
+          seconds: 2,
+          bake: async (progress) => {
+            baker ??= new PrecomputedAmbientOcclusion(atRest)
+            const statuetteAtRest = new THREE.BufferGeometry()
+            statuetteAtRest.setAttribute('position', lightingGeometry.attributes.position.clone())
+            statuetteAtRest.setAttribute('normal', lightingGeometry.attributes.normal.clone())
+            statuetteAtRest.translate(0, TOP, 0)
+            const statuette = await baker.bakeOcclusion(statuetteAtRest, OCCLUSION.statuette)
+            progress(1 / 3)
+            const floor = await baker.bakeOcclusion(floorOcclusion.receivers, OCCLUSION.floor)
+            progress(2 / 3)
+            const platter = await baker.bakeOcclusion(platterOcclusion.receivers, OCCLUSION.platter)
+            const values = { statuette, floor, platter }
+            showOcclusion(values)
+            return values
+          },
+          show: showOcclusion,
+        },
+        motionKernel: {
+          key: [sceneHash, CLUSTERED_KERNEL_FORMAT, masks.edgeFloor, startSigma, JSON.stringify(MOTION_KERNEL)].join(
+            '|',
+          ),
+          seconds: 11,
+          bake: async (progress) => {
+            const kernel = await motionKernelFor(startSigma, progress)
+            showMotionKernel(kernel)
+            return kernel
+          },
+          show: showMotionKernel,
+        },
+      }
+
+      // The file's bakes that fit, shown at once
+      const read = []
+      for (const [kind, { key, show }] of Object.entries(bakes)) {
+        const value = bakeFile.get(kind, key)
+        if (value === undefined) continue
+        try {
+          show(value)
+          bakeFile.keep(kind, key, value)
+          read.push(kind)
+        } catch (error) {
+          console.warn(`${BAKE_FILE}'s ${kind} doesn't fit, bake it again: ${error.message}`)
+        }
+      }
+      if (read.length > 0) console.log(`[precomputed-lighting] read ${BAKE_FILE}: ${read.join(', ')}`)
+
+      // The kinds the file didn't hold, baked at once into the progress bar, each shown as it lands
+      const progressBar = document.querySelector('#bake-progress')
+      function setProgress(stage, share) {
+        progressBar.hidden = false
+        progressBar.querySelector('.bar').style.width = `${share * 100}%`
+        progressBar.querySelector('.stage').textContent = `${stage} ${Math.round(share * 100)}%`
+      }
+      async function bakeMissing() {
+        const missing = Object.entries(bakes).filter(([kind, { key }]) => !bakeFile.keeps(kind, key))
+        const shares = Object.fromEntries(missing.map(([kind]) => [kind, 0]))
+        const seconds = missing.reduce((sum, [, bake]) => sum + bake.seconds, 0)
+        const started = performance.now()
+        const report = () => {
+          // a kind's share reported, or its share of its usual seconds where that's ahead, short of done: the kernel's
+          // workers report together, near its end
+          const elapsed = (performance.now() - started) / 1000
+          const share = (kind, bake) =>
+            shares[kind] === 1 ? 1 : Math.max(shares[kind], Math.min(0.95, elapsed / bake.seconds))
+          const done = missing.reduce((sum, [kind, bake]) => sum + bake.seconds * share(kind, bake), 0)
+          const left = missing.filter(([kind]) => shares[kind] < 1).map(([kind]) => kind)
+          const stage = left.length === 1 && left[0] === 'motionKernel' ? 'Building the motion kernel…' : 'Baking…'
+          setProgress(stage, seconds > 0 ? done / seconds : 1)
+        }
+        report()
+        const ticking = setInterval(report, 100)
+        try {
+          await Promise.all(
+            missing.map(async ([kind, bake]) => {
+              const value = await bake.bake((share) => (shares[kind] = Math.max(shares[kind], Math.min(share, 0.99))))
+              shares[kind] = 1
+              bakeFile.keep(kind, bake.key, value)
+            }),
+          )
+        } finally {
+          clearInterval(ticking)
+        }
+        report()
+        // the masks' pipelines for their data and motion kernel, so no turning frame builds one
+        await masks.compileAsync(renderer)
+        radiosity.needsUpdate = true
+      }
+      // Bake: the folder asked for first, while the click's activation lasts, then the bakes, then the file written
+      // into it, or downloaded where the browser can't pick a folder
+      async function bakeAndSave() {
+        const folder = await BakeFile.pickFolder('precomputed-lighting')
+        if (folder === undefined) return
+        bakeButton.disable()
+        try {
+          await bakeMissing()
+          setProgress('Saving…', 1)
+          const bytes = await bakeFile.save(folder, BAKE_FILE, { wholeWords: ['masks'] })
+          const megabytes = (bytes / 1e6).toFixed(1)
+          console.log(`[precomputed-lighting] saved ${BAKE_FILE}, ${megabytes} MB: keep it beside the page`)
+        } catch (error) {
+          console.error(`precomputed-lighting: the bake failed: ${error.message}`)
+        } finally {
+          progressBar.hidden = true
+          bakeButton.enable()
+        }
+      }
+
+      // ---- TAAU: the jittered scene, with the motion it reprojects by, accumulated into an anti-aliased image ----
+
+      const scenePass = pass(scene, camera, { samples: 0 })
+      scenePass.setMRT(mrt({ output, velocity }))
+      const velocityTexture = scenePass.getTexture('velocity')
+      velocityTexture.type = THREE.HalfFloatType // RG16F
+      velocityTexture.format = THREE.RGFormat
+      const taauNode = taau(
+        scenePass.getTextureNode('output'),
+        scenePass.getTextureNode('depth'),
+        scenePass.getTextureNode('velocity'),
+        camera,
+      )
+      const pipeline = new THREE.RenderPipeline(renderer)
+      pipeline.outputColorTransform = false
+      pipeline.outputNode = renderOutput(taauNode.getTextureNode())
+
+      // The scene pass at renderPixelRatio and the shadows' screen-space masks at half of it, their default share of the
+      // drawing buffer; TAAU upscales the scene to the output's pixel ratio.
+      const sceneScale = () => Math.min(1, params.renderPixelRatio / renderer.getPixelRatio())
+      function setSampling() {
+        const scale = sceneScale()
+        scenePass.setResolutionScale(scale)
+        for (const shadow of shadows) shadow.resolutionScale = 0.5 * scale
+        sceneScaleNode.value = scale
+      }
+      // The output's pixel ratio, and the scene's share of it: a move to another display changes the device's.
+      function setPixelRatio() {
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO))
+        setSampling()
+      }
+      setSampling()
+      window.addEventListener('resize', setPixelRatio)
+
+      // ---- GUI ----
+
+      const gui = new GUI({ title: 'Precomputed lighting' })
+      if (window.innerWidth < 600) gui.close()
+      // Bakes what index.bake didn't hold, shows it and saves the file, to keep beside the page
+      const bakeButton = gui.add({ bake: bakeAndSave }, 'bake').name(`bake (saves ${BAKE_FILE})`)
+      // Only the technique shown updates; its visibility then feeds the bounce
+      function setSelfShadow(method) {
+        selfShadowMode.value = SELF_SHADOWS.indexOf(method)
+        radiosity.needsUpdate = true
+      }
+      gui.add(params, 'selfShadow', SELF_SHADOWS.slice(1).concat('off')).name('self-shadow').onChange(setSelfShadow)
+      gui.add(params, 'bounce').name('bounce (radiosity)').onChange((on) => (bounceAmount.value = on ? 1 : 0))
+      gui
+        .add(params, 'castShadow')
+        .name('cast shadows (realtime)')
+        .onChange((on) => shadows.forEach((shadow) => (shadow.enabled = on)))
+      gui.add(params, 'occlusion').name('ambient occlusion').onChange((on) => (occlusionAmount.value = on ? 1 : 0))
+      gui
+        .add(params, 'contactOcclusion')
+        .name('contact occlusion (floor)')
+        .onChange((on) => (floorOcclusion.intensity = platterOcclusion.intensity = on ? 1 : 0))
+      gui.add(params, 'turntable', 0, 1.5, 0.01).name('turntable (rad/s)')
+      const look = gui.addFolder('Statuette')
+      look.add(params, 'bounces', 1, 4, 1).onChange((value) => (radiosity.bounces = value))
+
+      // The masks' spread over the surface while the statuette turns, at σ = softness: 'clustered kernel' one gather
+      // built in workers for that σ, an approximation (0.3 ms of the mini's GPU; the starting softness's built as the
+      // page loads, another's after its change, about 17 s on the mini at 1.5 cm), 'steps' ⌈σ²·maxRate⌉ explicit
+      // steps a frame (175 at 1.5 cm, 2.6 ms)
+      const masksFolder = gui.addFolder('Masks')
+      let kernelBuild = 0
+      async function setMotionSpread() {
+        const build = ++kernelBuild
+        const sigma = masks.softness
+        if (params.motionSpread === 'steps' || !(sigma > 0)) {
+          masks.motionKernel = null
+          spread.name('motion spread')
+          return
+        }
+        if (masks.motionKernel?.sigma === sigma) return
+        spread.name('motion spread (building…)')
+        const kernel = await motionKernelFor(sigma)
+        // a later choice or softness supersedes it
+        if (build !== kernelBuild) return
+        masks.motionKernel = kernel
+        await masks.compileAsync(renderer)
+        if (build === kernelBuild) spread.name('motion spread')
+      }
+      masksFolder
+        .add(params, 'softness', 0, 5, 0.1)
+        .name('softness (cm)')
+        .onChange((value) => (masks.softness = value / 100))
+        .onFinishChange(setMotionSpread)
+      masksFolder.add(masks, 'tier', ['auto', 'rest']).name('while turning')
+      const spread = masksFolder
+        .add(params, 'motionSpread', ['steps', 'clustered kernel'])
+        .name('motion spread')
+        .onChange(setMotionSpread)
+
+      // The transfer's evaluation is one compute over the lighting vertices whenever a light moves in their frame
+      // (0.04 ms of the mini's GPU at order 4 and 4 × 4 samples); a new rays count bakes again in workers (2.6 s at
+      // 256)
+      const transferFolder = gui.addFolder('Precomputed radiance transfer')
+      transferFolder.add(transfer, 'order', [2, 3, 4]).name('order (bands)')
+      transferFolder.add(transfer, 'samples', [2, 3, 4, 6, 8]).name('samples (per rect axis)')
+      // A new count stops the bake of the last one, which then keeps nothing
+      let transferBake = null
+      const rays = transferFolder
+        .add(params, 'transferRays', [64, 128, 256, 512, 1024])
+        .name('rays (bake)')
+        .onChange(async (value) => {
+          transferBake?.abort()
+          const bake = (transferBake = new AbortController())
+          rays.name('rays (baking…)')
+          try {
+            await transfer.bake({ rays: value, signal: bake.signal })
+          } catch (error) {
+            if (bake.signal.aborted) return
+            throw error
+          }
+          rays.name('rays (bake)')
+        })
+      const lights = gui.addFolder('Lights')
+      lights.add(params, 'animateLights').name('animate lights')
+      lights.add(params, 'lightsSpeed', -90, 90, 1).name('lights speed (°/s)')
+      lights.add(params, 'key', 0, 300, 1).onChange((value) => (key.intensity = value))
+      lights.add(params, 'fill', 0, 20, 0.1).onChange((value) => (fill.intensity = value))
+      lights.add(params, 'exposure', 0.2, 3, 0.01).onChange((value) => (renderer.toneMappingExposure = value))
+      const view = gui.addFolder('Camera')
+      view.add(params, 'fov', 10, 90, 1).name('fov (°)').onChange((value) => {
+        camera.fov = value
+        camera.updateProjectionMatrix()
+      })
+      const resolution = gui.addFolder('Resolution')
+      resolution.add(params, 'renderPixelRatio', RENDER_PIXEL_RATIOS).name('render pixel ratio').onChange(setSampling)
+
+      // ---- Loop ----
+
+      await loading.stage('Compiling shaders…')
+      // the masks' pipelines too, their motion kernel's gathers among them, so the first turning frame builds none
+      await masks.compileAsync(renderer)
+      for (const shadow of shadows) await shadow.compileAsync(renderer, scene, camera)
+      await taauNode.compileAsync(renderer)
+      const timer = new THREE.Timer()
+      timer.connect(document)
+      renderer.setAnimationLoop((now) => {
+        timer.update(now)
+        const delta = Math.min(timer.getDelta(), 1 / 20)
+        turntable.rotation.y += delta * params.turntable
+        if (params.animateLights) {
+          params.lightsTurn = (params.lightsTurn + delta * params.lightsSpeed) % 360
+          turnLights(params.lightsTurn)
+        }
+        turntable.updateMatrixWorld()
+        // the self-shadow writes the visibility the radiosity's compute then reads
+        const selfShadow = { masks, 'precomputed radiance transfer': transfer }[params.selfShadow]
+        if (selfShadow?.update(renderer)) radiosity.needsUpdate = true
+        if (params.bounce) radiosity.update(renderer)
+        controls.update()
+        // every transform first, then the shadows' screen-space masks, before the beauty
+        for (const shadow of shadows) shadow.render(renderer, scene, camera)
+        pipeline.render()
+        stats.update()
+        renderer.resolveTimestampsAsync('compute')
+        renderer.resolveTimestampsAsync('render')
+      })
+      loading.done()
+    </script>
+  </body>
+</html>

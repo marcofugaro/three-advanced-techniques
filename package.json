@@ -15,7 +15,11 @@
     "motion-blur",
     "screen-space-reflections",
     "soft-shadows",
-    "soft-body"
+    "soft-body",
+    "area-light",
+    "global-illumination",
+    "irradiance-probes",
+    "reaction-diffusion"
   ],
   "homepage": "https://github.com/marcofugaro/three-advanced-techniques#readme",
   "bugs": {
@@ -43,9 +47,14 @@
     "three-advanced-techniques.d.ts",
     "rendering/",
     "simulations/",
+    "utils/compileQuad.js",
     "!**/*.html",
     "!**/*.md",
-    "!**/*.webp"
+    "!**/*.webp",
+    "!**/models/**",
+    "!**/textures/**",
+    "!**/*.zip",
+    "!**/*.local/**"
   ],
   "scripts": {
     "dev": "serve --listen 5174 --no-request-logging",
@@ -53,16 +62,25 @@
   },
   "peerDependencies": {
     "@types/three": ">=0.187.0",
-    "three": ">=0.187.0"
+    "three": ">=0.187.0",
+    "three-mesh-bvh": ">=0.9.15"
   },
   "peerDependenciesMeta": {
     "@types/three": {
       "optional": true
+    },
+    "three-mesh-bvh": {
+      "optional": true
     }
   },
   "devDependencies": {
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
     "@types/three": "^0.187.0",
+    "meshoptimizer": "^1.3.0",
     "puppeteer": "^25.10.0",
-    "serve": "^14.2.8"
+    "serve": "^14.2.8",
+    "sharp": "^0.35.5"
   }
 }

@@ -21,7 +21,7 @@ const WIDTH = 1280
 const HEIGHT = 720
 const QUALITY = 85
 // Seconds each page runs after loading, so its simulation settles and its temporal effects converge.
-const SETTLE = { noodles: 10, worms: 20 }
+const SETTLE = { noodles: 10, worms: 20, 'reaction-diffusion': 30, 'discobulus-reaction-diffusion': 60, 'environment-lighting': 12 }
 const DEFAULT_SETTLE = 3
 const LOAD_TIMEOUT_MS = 120_000
 
@@ -38,6 +38,7 @@ const outDir = flag('--out') && resolve(root, flag('--out'))
 const pages = ['rendering', 'simulations', 'examples']
   .flatMap((dir) => readdirSync(join(root, dir), { recursive: true }).map((file) => join(dir, file)))
   .filter((file) => file.endsWith('.html'))
+  .filter((file) => !file.split('/').some((part) => part.endsWith('.local'))) // scratch pages
   .filter((file) => filters.length === 0 || filters.some((f) => file.includes(f)))
   .filter((file) => !filtersOut.some((f) => file.includes(f)))
   .map((file) => {

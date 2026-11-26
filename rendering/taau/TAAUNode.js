@@ -83,7 +83,7 @@ import {
   viewZToPerspectiveDepth,
   viewZToReversedPerspectiveDepth,
 } from 'three/tsl'
-import { compileQuad } from './utils/compileQuad.js'
+import { compileQuad } from '../../utils/compileQuad.js'
 import {
   clipAABB,
   computeHaltonOffsets,
@@ -93,6 +93,7 @@ import {
 
 const _quadMesh = /*@__PURE__*/ new QuadMesh()
 const _size = /*@__PURE__*/ new Vector2()
+const _inputSize = /*@__PURE__*/ new Vector2()
 
 let _rendererState
 
@@ -534,7 +535,14 @@ class TAAUNode extends Node {
 
     this.#jitterOffset.value.set(jitterX, jitterY)
 
+    // three's setViewOffset() sets the aspect to the input's, which flooring to whole pixels moves off the camera's and
+    // stretches the image: the camera keeps its own, and the offset stays a share of an input pixel
+    const { aspect } = this.camera
     this.camera.setViewOffset(inputWidth, inputHeight, jitterX, jitterY, inputWidth, inputHeight)
+    if (aspect !== undefined && this.camera.aspect !== aspect) {
+      this.camera.aspect = aspect
+      this.camera.updateProjectionMatrix()
+    }
   }
 
   clearViewOffset() {
@@ -577,7 +585,8 @@ class TAAUNode extends Node {
     this.#outputSize.value.set(outputWidth, outputHeight)
 
     if (this.#needsPostProcessingSync === true) {
-      this.setViewOffset(inputWidth, inputHeight)
+      const { x, y } = this.#inputSize(renderer)
+      this.setViewOffset(x, y)
       this.#needsPostProcessingSync = false
     }
 
@@ -676,8 +685,8 @@ class TAAUNode extends Node {
       this.#needsPostProcessingSync = true
 
       OnBeforeRenderPipeline(() => {
-        const beautyRenderTarget = this.#beautyRenderTarget()
-        this.setViewOffset(beautyRenderTarget.texture.width, beautyRenderTarget.texture.height)
+        const { x, y } = this.#inputSize(builder.renderer)
+        this.setViewOffset(x, y)
       })
 
       OnAfterRenderPipeline(() => {
@@ -761,6 +770,19 @@ class TAAUNode extends Node {
 
   #beautyRenderTarget() {
     return this.beautyNode.isRTTNode ? this.beautyNode.renderTarget : this.beautyNode.passNode.renderTarget
+  }
+
+  // The size the beauty renders at this frame, worked out as its pass sizes it: the drawing buffer at the pass's
+  // resolution scale. The texture itself is 1×1 until the pass first renders and a frame behind a resize, and the
+  // jitter's view offset is a share of a pixel of this size.
+  #inputSize(renderer) {
+    const beauty = this.beautyNode
+    if (beauty.isRTTNode && !beauty.autoResize) {
+      return _inputSize.set(beauty.renderTarget.width, beauty.renderTarget.height)
+    }
+    const scale = beauty.isRTTNode ? beauty.getResolutionScale() : beauty.passNode.getResolutionScale()
+    renderer.getDrawingBufferSize(_inputSize)
+    return _inputSize.set(Math.floor(_inputSize.x * scale), Math.floor(_inputSize.y * scale))
   }
 
   // What the shaders bake in.

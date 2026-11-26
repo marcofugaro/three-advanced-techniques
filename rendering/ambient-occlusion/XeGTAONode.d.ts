@@ -17,6 +17,8 @@ export interface XeGTAONodeOptions {
   velocityNode?: TextureNode | null
   /** Horizon slices per pixel. Rebuilds the shaders on change. Default 2. */
   sliceCount?: number
+  /** Slices where an occluder moved within reach or the history is short; null: one more. Rebuilds the shaders. */
+  motionSliceCount?: number | null
   /** Steps per side of each slice. Rebuilds the shaders on change. Default 3. */
   stepsPerSlice?: number
   /** The AO's resolution relative to the drawing buffer. Default 0.5. */
@@ -29,6 +31,8 @@ export interface XeGTAONodeOptions {
   changeDetection?: boolean
   /** With a velocity node, reprojects what moves on its own along its motion vectors. Default true. */
   motionVectors?: boolean
+  /** Blurs wider where the history is short, in one more pass, so fresh noise doesn't crawl. Default true. */
+  historyFix?: boolean
   /** World units. Default 0.5. */
   radius?: number
   /** Blends from no occlusion (0) to full (1). Default 1. */
@@ -49,6 +53,12 @@ export interface XeGTAONodeOptions {
   sampleDistributionPower?: number
   /** How far a denoise tap may sit off the center's plane, × view distance. Default 0.011. */
   denoiseTolerance?: number
+  /** With historyFix, the history length under which it blurs wider: in full at 1 frame, gone from here. Default 4. */
+  historyFixLength?: number
+  /** With historyFix, how far a wider-blur tap may sit off the center's plane, × view distance. Default 0.004. */
+  historyFixTolerance?: number
+  /** With historyFix, the AO difference from the center at which a tap stops counting; 0 for any. Default 0.2. */
+  historyFixRange?: number
   /** How far an AO texel's depth may be from the pixel's in the upsample, × view distance. Default 0.02. */
   upsampleTolerance?: number
   /** The current frame's weight over a full history: lower is smoother and slower to settle. Default 0.1. */
@@ -89,6 +99,9 @@ export declare class XeGTAONode extends Node<'float'> {
 
   /** Horizon slices per pixel. Rebuilds the shaders on change. Default 2. */
   sliceCount: number
+  /** Slices where an occluder moved within reach or the history is short; null: one more. Rebuilds the shaders. */
+  get motionSliceCount(): number
+  set motionSliceCount(value: number | null)
   /** Steps per side of each slice. Rebuilds the shaders on change. Default 3. */
   stepsPerSlice: number
   /** The AO's resolution relative to the drawing buffer. Default 0.5. */
@@ -101,6 +114,8 @@ export declare class XeGTAONode extends Node<'float'> {
   changeDetection: boolean
   /** With a velocity node, reprojects what moves on its own along its motion vectors. Default true. */
   motionVectors: boolean
+  /** Blurs wider where the history is short, in one more pass, so fresh noise doesn't crawl. Default true. */
+  historyFix: boolean
 
   /** World units. Default 0.5. */
   get radius(): UniformNode<'float'>
@@ -132,6 +147,15 @@ export declare class XeGTAONode extends Node<'float'> {
   /** How far a denoise tap may sit off the center's plane, × view distance. Default 0.011. */
   get denoiseTolerance(): UniformNode<'float'>
   set denoiseTolerance(value: number)
+  /** With historyFix, the history length under which it blurs wider: in full at 1 frame, gone from here. Default 4. */
+  get historyFixLength(): UniformNode<'float'>
+  set historyFixLength(value: number)
+  /** With historyFix, how far a wider-blur tap may sit off the center's plane, × view distance. Default 0.004. */
+  get historyFixTolerance(): UniformNode<'float'>
+  set historyFixTolerance(value: number)
+  /** With historyFix, the AO difference from the center at which a tap stops counting; 0 for any. Default 0.2. */
+  get historyFixRange(): UniformNode<'float'>
+  set historyFixRange(value: number)
   /** How far an AO texel's depth may be from the pixel's in the upsample, × view distance. Default 0.02. */
   get upsampleTolerance(): UniformNode<'float'>
   set upsampleTolerance(value: number)

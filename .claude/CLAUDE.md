@@ -8,15 +8,22 @@ Advanced three.js WebGPU techniques, written in TSL and shipped as plain ES modu
   It never re-exports anything from a `utils/` folder: users import those by path
   (`three-advanced-techniques/rendering/motion-blur/utils/CameraVelocity.js`), which `exports` in `package.json` allows.
   `three-advanced-techniques.d.ts` re-exports the main modules' types the same way.
-- `rendering/<technique>/`: one folder per rendering technique (ambient-occlusion, bloom, motion-blur,
-  screen-space-reflections, soft-shadows, taau), with a README on why it's fast. The main module is named after the
-  technique, e.g. `BloomNode.js`.
+- `rendering/<technique>/`: one folder per rendering technique (ambient-occlusion, area-light, bloom,
+  environment-lighting, motion-blur, precomputed-lighting, screen-space-reflections, taau), with a README on why it's
+  fast. The main module is named after the technique, e.g. `BloomNode.js`; a folder can hold several
+  (`precomputed-lighting/PrecomputedRadiosity.js`, `SelfShadowVisibilityMasks.js`). A worker sits beside the module
+  that runs it, named after it (`precomputed-lighting/PrecomputedRadiosity.worker.js`,
+  `precomputed-lighting/utils/SurfaceDiffusion.worker.js`).
   - `rendering/<technique>/utils/`: the technique's helpers, imported by its main module
-    (`motion-blur/utils/CameraVelocity.js`, `screen-space-reflections/utils/newtonRayTrace.js`).
-- `simulations/<technique>/`: one folder per GPU simulation, with a README explaining its techniques.
+    (`motion-blur/utils/CameraVelocity.js`).
+- `simulations/<technique>/`: one folder per GPU simulation (noodles, reaction-diffusion), with a README explaining its
+  techniques.
   - `simulations/<technique>/utils/`: the simulation's helpers, imported by its main module.
-- `utils/`: the repo's dev scripts (`generate-screenshots.js`, the examples' `importmap.js`), not shipped, and
-  `GPUTierDetector.js`, shipped and imported by path (`three-advanced-techniques/utils/GPUTierDetector.js`).
+- `utils/`: the repo's dev scripts (`generate-screenshots.js`, the examples' `loading.js`, the `<loading-screen>` every
+  page that downloads assets shows), not shipped, and `GPUTierDetector.js`, shipped and imported by path
+  (`three-advanced-techniques/utils/GPUTierDetector.js`). `compileQuad.js`, shipped, is the rendering techniques' shared
+  helper: a helper more than one technique imports lives here, not in each technique's `utils/`.
+- Every demo page writes its import map inline, mapping only the packages its modules import.
 - `examples/`: demos, each one HTML file and one JS file (`worm-monster.html` and `worm-monster.js`).
   - `examples/utils/`: the examples' helpers, not shipped in the package (`BodyField.js`, `FieldAttractor.js`).
   - `examples/models/`: glTF assets. Rigged, animated models go in `skinning/`.
@@ -39,7 +46,17 @@ Advanced three.js WebGPU techniques, written in TSL and shipped as plain ES modu
   Each option is also a property of the same name that can be changed afterwards (`occlusion.radius = 0.3`): a
   uniform-backed setting's getter returns its uniform and its setter takes a number; an option baked into the node's
   shaders or targets rebuilds them on the next frame, and its doc says when the output graph must rebuild too.
-- Examples tone-map with AgX (`THREE.AgXToneMapping`), always: no picker in the GUI.
+- Examples tone-map with AgX (`THREE.AgXToneMapping`) or three's Neutral (`THREE.NeutralToneMapping`), always: no picker in the GUI. It depends on the scene.
+- IMPORTANT: The rendering demos (`rendering/<technique>/index.html`) show `utils/loading.js`'s `<loading-screen>` while
+  they load: each download through `loading.track()`, which reads "Loading models…", and an awaited
+  `loading.stage('Compiling shaders…')` (or another stage) before work that blocks the page. They anti-alias with TAAU
+  (`rendering/taau/TAAUNode.js`), never TRAA, FXAA or MSAA.
+- IMPORTANT: Every demo upscales with TAAU as worm-monster's desktop tier does: the scene renders at `renderPixelRatio`
+  (1 px per CSS pixel by default), a GUI dropdown in a 'Resolution' folder, and TAAU upscales it to the output's
+  pixel ratio, fixed at `MAX_PIXEL_RATIO` (2), not a param. Every pass that renders the scene, and every composite that reads it before TAAU, follows the
+  scene's scale (`setResolutionScale(sceneScale())`); XeGTAO runs at half of it. See
+  `rendering/screen-space-reflections/index.html` (`setSampling`). The TAAU demo, whose subject is the upscaling,
+  defaults to 2 instead and shows only a 'TAAU pixel ratio' slider (0.5–2).
 - `npm run dev` serves the repo root with `serve` on port 5174.
 - GitHub Pages hosts the repo root under the user `marcofugaro`, at
   `https://marcofugaro.github.io/three-advanced-techniques/`: each demo runs at its path there

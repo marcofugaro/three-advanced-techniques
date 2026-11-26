@@ -6,7 +6,7 @@ Temporal anti-aliasing upscaling: the scene renders jittered, at or below the ou
 
 #### Live link: https://marcofugaro.github.io/three-advanced-techniques/rendering/taau/
 
-## Use
+## Usage
 
 ```sh
 npm install three three-advanced-techniques

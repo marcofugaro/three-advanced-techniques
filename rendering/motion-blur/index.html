@@ -10,50 +10,65 @@
         margin: 0;
         height: 100%;
         overflow: hidden;
-        background: #07080c;
+        background: #a9b4bf;
       }
       canvas {
         display: block;
         touch-action: none;
       }
-      #hint {
-        position: fixed;
-        left: 50%;
-        bottom: 16px;
-        max-width: calc(100vw - 32px);
-        margin: 0;
-        padding: 6px 14px;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.08);
-        color: #aab0bd;
-        font: 12px/1.4 system-ui, sans-serif;
-        text-align: center;
-        transform: translateX(-50%);
-        pointer-events: none;
-      }
     </style>
-    <script src="../../utils/importmap.js"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.webgpu.js",
+          "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.webgpu.js",
+          "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.tsl.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/",
+          "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.21.0/dist/lil-gui.esm.js",
+          "stats-gl": "https://cdn.jsdelivr.net/npm/stats-gl@4.2.3/dist/main.js"
+        }
+      }
+    </script>
+    <script src="../../utils/loading.js"></script>
   </head>
   <body>
-    <p id="hint">The spinning rotor streaks as an open shutter sees it · drag to orbit</p>
+    <loading-screen style="--background: #a9b4bf; --color: #2c3138"></loading-screen>
     <script type="module">
       import * as THREE from 'three/webgpu'
-      import { mrt, output, pass, velocity } from 'three/tsl'
+      import { color, mix, mrt, mx_fractal_noise_float, mx_noise_float, output, pass, renderOutput, rtt, smoothstep, texture, uv, vec2, vec3, vec4, velocity } from 'three/tsl'
       import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+      import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+      import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
+      import { SkyMesh } from 'three/addons/objects/SkyMesh.js'
       import GUI from 'lil-gui'
       import Stats from 'stats-gl'
+      import { taau } from '../taau/TAAUNode.js'
       import { motionBlur } from './MotionBlurNode.js'
 
-      // ---- The stage the rendering examples share: a dark studio, a glossy floor, neon in three colours ----
+      // ---- A seamless backdrop outdoors in the sun: a runner sprinting in place, a spinning wheel, a big pinwheel ----
 
-      const NEON = ['#ff2e7e', '#25d9ff', '#ffaa2b'].map((hex) => new THREE.Color(hex))
-      const DARK = '#07080c'
+      const params = {
+        blur: true,
+        pace: 1, // the run's playback rate
+        wheel: 1.5, // turns per second
+        pinwheel: 1.6, // turns per second
+        finish: 'ceramic',
+        exposure: 0.62,
+        fov: 32,
+        // Resolution, as worm-monster's desktop tier: the scene's pixels per CSS pixel, one of RENDER_PIXEL_RATIOS,
+        // which TAAU upscales to the output's
+        renderPixelRatio: 1,
+      }
+      const RENDER_PIXEL_RATIOS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
+      const MAX_PIXEL_RATIO = 2 // the output's pixels per CSS pixel at most
 
-      const renderer = new THREE.WebGPURenderer({ antialias: true })
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+      const renderer = new THREE.WebGPURenderer({ antialias: false }) // TAAU anti-aliases
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO))
       renderer.setSize(window.innerWidth, window.innerHeight)
       renderer.toneMapping = THREE.AgXToneMapping
+      renderer.toneMappingExposure = params.exposure
       renderer.shadowMap.enabled = true
+      renderer.shadowMap.type = THREE.PCFShadowMap
       document.body.appendChild(renderer.domElement)
       await renderer.init()
 
@@ -62,62 +77,18 @@
       stats.init(renderer)
 
       const scene = new THREE.Scene()
-      scene.background = new THREE.Color(DARK)
-      scene.fog = new THREE.Fog(DARK, 10, 24)
+      scene.fog = new THREE.FogExp2('#c6d1dc', 0.006) // the haze toward the horizon
 
-      // The environment: a dark room under a neon tube in each colour, which the glossy surfaces reflect.
-      const studio = new THREE.Scene()
-      studio.add(
-        new THREE.Mesh(
-          new THREE.BoxGeometry(16, 8, 16),
-          new THREE.MeshBasicMaterial({ color: '#101218', side: THREE.BackSide }),
-        ),
-      )
-      for (const [i, color] of NEON.entries()) {
-        const tube = new THREE.Mesh(
-          new THREE.BoxGeometry(6, 0.25, 0.25),
-          new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(5) }),
-        )
-        tube.position.set(0, 3.5, (i - 1) * 2.5)
-        studio.add(tube)
-      }
-      const pmrem = new THREE.PMREMGenerator(renderer)
-      scene.environment = pmrem.fromScene(studio, 0.04).texture
-      pmrem.dispose()
-
-      const key = new THREE.DirectionalLight('#ffffff', 1.2)
-      key.position.set(3, 8, 4)
-      key.castShadow = true
-      key.shadow.mapSize.setScalar(2048)
-      key.shadow.camera.left = key.shadow.camera.bottom = -4
-      key.shadow.camera.right = key.shadow.camera.top = 4
-      key.shadow.camera.near = 1
-      key.shadow.camera.far = 20
-      key.shadow.bias = -0.0002 // a share of near to far: about 4 mm
-      scene.add(key)
-
-      const floor = new THREE.Mesh(
-        new THREE.CircleGeometry(24, 96).rotateX(-Math.PI / 2),
-        new THREE.MeshStandardNodeMaterial({ color: '#1a1d24', roughness: 0.3 }),
-      )
-      floor.receiveShadow = true
-      const plinth = new THREE.Mesh(
-        new THREE.CylinderGeometry(1.5, 1.55, 0.16, 96).translate(0, 0.08, 0),
-        new THREE.MeshStandardNodeMaterial({ color: '#1d2028', roughness: 0.45 }),
-      )
-      plinth.castShadow = plinth.receiveShadow = true
-      scene.add(floor, plinth)
-
-      // Unlit and brighter than white: what the effects light up.
-      const neon = (color, intensity = 4) => new THREE.MeshBasicNodeMaterial({ color: color.clone().multiplyScalar(intensity) })
-
-      const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 60)
-      camera.position.set(0, 2.1, 6)
+      const camera = new THREE.PerspectiveCamera(params.fov, window.innerWidth / window.innerHeight, 0.1, 2000)
+      camera.position.set(1.807, 2.814, 5.152)
       const controls = new OrbitControls(camera, renderer.domElement)
-      controls.target.set(0, 1.1, 0)
+      controls.target.set(-0.011, 1.268, -0.526)
       controls.enableDamping = true
-      controls.minDistance = 3
-      controls.maxDistance = 14
+      // in front of the backdrop, which then fills the view
+      controls.minDistance = 2
+      controls.maxDistance = 11
+      controls.minAzimuthAngle = -0.65
+      controls.maxAzimuthAngle = 0.65
       controls.maxPolarAngle = THREE.MathUtils.degToRad(85)
       controls.update()
 
@@ -127,79 +98,292 @@
         renderer.setSize(window.innerWidth, window.innerHeight)
       })
 
-      // ---- Motion blur: a rotor of neon-tipped arms, spinning fast round a still chrome hub ----
+      // ---- The set: a painted backdrop out in the sun ----
 
-      const HUB_HEIGHT = 1.4
-      const metal = new THREE.MeshStandardNodeMaterial({ color: '#b8bdc8', metalness: 0.4, roughness: 0.35 })
+      // The sun: high in the front left, so the shadows fall back across the sweep.
+      const SUN = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(52), THREE.MathUtils.degToRad(-40))
 
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.06, HUB_HEIGHT, 24), metal)
-      post.position.set(0, HUB_HEIGHT / 2, -0.12)
-      const hub = new THREE.Mesh(
-        new THREE.SphereGeometry(0.16, 48, 24),
-        new THREE.MeshStandardNodeMaterial({ color: '#ffffff', metalness: 1, roughness: 0.12 }),
+      const sky = new SkyMesh()
+      sky.scale.setScalar(1000)
+      sky.turbidity.value = 3
+      sky.sunPosition.value.copy(SUN)
+      scene.add(sky)
+
+      const sun = new THREE.DirectionalLight('#fff2df', 7)
+      sun.position.copy(SUN).multiplyScalar(20)
+      sun.castShadow = true
+      sun.shadow.mapSize.setScalar(2048)
+      Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 50 })
+      sun.shadow.bias = -0.0003
+      sun.shadow.normalBias = 0.02
+      sun.shadow.radius = 2
+      scene.add(sun)
+
+      const ground = new THREE.Mesh(
+        new THREE.CircleGeometry(400, 64).rotateX(-Math.PI / 2),
+        new THREE.MeshStandardNodeMaterial({ name: 'ground', color: '#b9ad98', roughness: 1 }),
       )
-      hub.position.set(0, HUB_HEIGHT, 0.04)
-      post.castShadow = hub.castShadow = true
-      scene.add(post, hub)
+      ground.name = 'ground'
+      ground.receiveShadow = true
+      scene.add(ground)
 
-      // Six arms in the plane facing the camera, each with a neon tip: the tips draw arcs.
-      const rotor = new THREE.Group()
-      rotor.position.set(0, HUB_HEIGHT, 0)
-      scene.add(rotor)
-      const armGeometry = new THREE.BoxGeometry(1, 0.04, 0.04).translate(0.5, 0, 0)
-      const tipGeometry = new THREE.SphereGeometry(0.075, 24, 12)
-      for (let i = 0; i < 6; i++) {
-        const arm = new THREE.Group()
-        arm.rotation.z = (i / 6) * Math.PI * 2
-        const bar = new THREE.Mesh(armGeometry, metal)
-        const tip = new THREE.Mesh(tipGeometry, neon(NEON[i % NEON.length]))
-        tip.position.x = 1.05
-        bar.castShadow = tip.castShadow = true
-        arm.add(bar, tip)
-        rotor.add(arm)
+      // A seamless sweep: a painted muslin floor that bends up into a wall, wide and tall enough to fill every view.
+      const SWEEP = { width: 50, front: 9, back: -3.5, radius: 2, height: 8 }
+      const profile = [[SWEEP.back - SWEEP.radius, SWEEP.height]] // z, y: from the wall's top to the floor's front
+      for (let i = 0; i <= 24; i++) {
+        const t = (1 - i / 24) * (Math.PI / 2)
+        profile.push([SWEEP.back - SWEEP.radius * Math.sin(t), SWEEP.radius * (1 - Math.cos(t))])
       }
+      profile.push([SWEEP.front, 0])
+      const along = [0] // m down the profile, for a texture without stretch
+      for (let row = 1; row < profile.length; row++) {
+        along.push(along[row - 1] + Math.hypot(profile[row][0] - profile[row - 1][0], profile[row][1] - profile[row - 1][1]))
+      }
+      const LENGTH = along.at(-1)
+      const sweepGeometry = new THREE.PlaneGeometry(SWEEP.width, 1, 1, profile.length - 1)
+      const position = sweepGeometry.attributes.position
+      const uvs = sweepGeometry.attributes.uv
+      for (let i = 0; i < position.count; i++) {
+        const row = Math.floor(i / 2) // two vertices a row, rows top to bottom
+        const [z, y] = profile[row]
+        position.setY(i, y + 0.002) // clear of the ground
+        position.setZ(i, z)
+        uvs.setY(i, 1 - along[row] / LENGTH)
+      }
+      sweepGeometry.computeVertexNormals()
 
-      const scenePass = pass(scene, camera)
+      // The paint, baked once: broad clouds of tone, smaller blotches and the cloth's tooth, with metres as units.
+      const paintTarget = new THREE.RenderTarget(4096, 2048, {
+        depthBuffer: false,
+        generateMipmaps: true,
+        minFilter: THREE.LinearMipmapLinearFilter,
+        anisotropy: 8,
+      })
+      paintTarget.texture.name = 'muslin paint'
+      {
+        const p = uv().mul(vec2(SWEEP.width, LENGTH))
+        const clouds = mx_fractal_noise_float(vec3(p.mul(0.16), 1.3), 5, 2, 0.55)
+        const blotches = mx_fractal_noise_float(vec3(p.mul(0.8), 7.1), 3, 2, 0.5)
+        const tooth = mx_noise_float(vec3(p.mul(45), 2.2))
+        const shade = clouds.mul(0.38).add(blotches.mul(0.1)).add(tooth.mul(0.035)).add(0.5).saturate()
+        const quad = new THREE.QuadMesh(new THREE.MeshBasicNodeMaterial({ name: 'muslin paint', fragmentNode: vec4(shade, 0, 0, 1) }))
+        renderer.setRenderTarget(paintTarget)
+        quad.render(renderer)
+        renderer.setRenderTarget(null)
+        quad.material.dispose()
+      }
+      const muslin = new THREE.MeshStandardNodeMaterial({ name: 'sweep', roughness: 0.92 })
+      muslin.colorNode = mix(color('#998f82'), color('#ddd5c6'), smoothstep(0.08, 0.92, texture(paintTarget.texture).r))
+      const sweep = new THREE.Mesh(sweepGeometry, muslin)
+      sweep.name = 'sweep'
+      sweep.receiveShadow = sweep.castShadow = true
+      scene.add(sweep)
+
+      // ---- The runner and the props ----
+
+      const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder)
+      // The loading screen's bar follows the bytes of all three models.
+      const loading = document.querySelector('loading-screen')
+      const MODELS = ['runner', 'tire', 'pinwheel']
+      const load = (name) => loading.track((onProgress) => loader.loadAsync(`models/${name}.glb`, onProgress))
+      const [runnerGLTF, tireGLTF, pinwheelGLTF] = await Promise.all(MODELS.map(load))
+      const castShadows = (object) =>
+        object.traverse((child) => {
+          if (child.isMesh) child.castShadow = child.receiveShadow = true
+        })
+
+      // The runner: a mannequin sprinting in place, side on to the camera.
+      const FINISHES = {
+        ceramic: { body: ['#dcd8d0', 0, 0.32], joints: ['#232428', 0.3, 0.45] },
+        chrome: { body: ['#e6e8ec', 1, 0.05], joints: ['#1c1d20', 0.8, 0.3] },
+        graphite: { body: ['#2a2b2e', 0.6, 0.28], joints: ['#b8bbc2', 1, 0.15] },
+      }
+      const runnerBody = new THREE.MeshStandardNodeMaterial({ name: 'runner-body' })
+      const runnerJoints = new THREE.MeshStandardNodeMaterial({ name: 'runner-joints' })
+      function setFinish() {
+        const { body, joints } = FINISHES[params.finish]
+        for (const [material, [hex, metalness, roughness]] of [
+          [runnerBody, body],
+          [runnerJoints, joints],
+        ]) {
+          material.color.set(hex)
+          material.metalness = metalness
+          material.roughness = roughness
+        }
+      }
+      setFinish()
+
+      const runner = runnerGLTF.scene
+      runner.position.set(-0.2, 0, 0.3)
+      runner.rotation.y = Math.PI / 2 // facing +x: running to the right
+      runner.traverse((child) => {
+        if (!child.isSkinnedMesh) return
+        child.material = child.name.includes('joints') ? runnerJoints : runnerBody
+        child.castShadow = child.receiveShadow = true
+        child.boundingSphere = new THREE.Sphere(new THREE.Vector3(-0.06, 0.84, -0.11), 1.02) // holds every pose of the run
+      })
+      scene.add(runner)
+      const mixer = new THREE.AnimationMixer(runner)
+      mixer.clipAction(runnerGLTF.animations[0]).play() // "run", in place
+
+      // The pinwheel, behind on the right on a short pole, facing the camera: a fifth bigger than modelled.
+      const pinwheel = pinwheelGLTF.scene
+      pinwheel.position.set(1.05, 0, -1.6)
+      pinwheel.scale.setScalar(1.2)
+      castShadows(pinwheel)
+      const rotor = pinwheel.getObjectByName('rotor') // turns about its +z, out of its face
+      scene.add(pinwheel)
+
+      // The sheet's two sides, matte paint under a satin coat; the GUI's Pinwheel Material folder sets them.
+      const sheet = { front: '#f2b400', back: '#ee4b16', roughness: 0.6, specular: 1, clearcoat: 1, clearcoatRoughness: 0.4 } // yellow in the cups, orange-red on the curls
+      const sides = {
+        'pinwheel-front': new THREE.MeshPhysicalNodeMaterial({ name: 'pinwheel-front' }),
+        'pinwheel-back': new THREE.MeshPhysicalNodeMaterial({ name: 'pinwheel-back' }),
+      }
+      function setSheet() {
+        for (const [name, material] of Object.entries(sides)) {
+          material.color.set(name === 'pinwheel-front' ? sheet.front : sheet.back)
+          material.roughness = sheet.roughness
+          material.specularIntensity = sheet.specular
+          material.clearcoatRoughness = sheet.clearcoatRoughness
+          if (material.clearcoat > 0 !== sheet.clearcoat > 0) material.needsUpdate = true // the coat's shader comes and goes
+          material.clearcoat = sheet.clearcoat
+        }
+      }
+      setSheet()
+      pinwheel.traverse((child) => {
+        if (child.isMesh && sides[child.material.name]) child.material = sides[child.material.name]
+      })
+
+      // The wheel, standing on its tyre on the left, its spokes to the camera.
+      const TIRE_RADIUS = 0.34
+      const tire = tireGLTF.scene
+      tire.position.set(-1.9, TIRE_RADIUS + 0.002, -0.3) // the hub, the tread just clear of the floor
+      tire.rotation.y = -Math.PI / 2 // its spokes (+x) to the camera (+z)
+      castShadows(tire)
+      const wheel = tire.getObjectByName('wheel') // tyre, rim and disc, about its +x; the caliper stays
+      scene.add(tire)
+
+      // The sky and the sunlit sweep light everything else: the environment, seen from the set without the props.
+      for (const object of [runner, pinwheel, tire]) object.visible = false
+      const pmrem = new THREE.PMREMGenerator(renderer)
+      scene.environment = pmrem.fromScene(scene, 0.02, 0.1, 2000, { position: new THREE.Vector3(0, 1.2, 0) }).texture
+      scene.environmentIntensity = 0.25 // the fill: the sun stays the key
+      pmrem.dispose()
+      for (const object of [runner, pinwheel, tire]) object.visible = true
+
+      // ---- Post-processing: the motion blur, then TAAU ----
+
+      const scenePass = pass(scene, camera, { samples: 0 }) // jittered for TAAU, without MSAA
       scenePass.setMRT(mrt({ output, velocity }))
       const velocityTexture = scenePass.getTexture('velocity') // RG16F
       velocityTexture.type = THREE.HalfFloatType
       velocityTexture.format = THREE.RGFormat
       const sceneColor = scenePass.getTextureNode('output')
-      const blurred = motionBlur(sceneColor, scenePass.getTextureNode('depth'), camera, {
-        velocityNode: scenePass.getTextureNode('velocity'),
+      const sceneDepth = scenePass.getTextureNode('depth')
+      const sceneVelocity = scenePass.getTextureNode('velocity')
+      const blurred = motionBlur(sceneColor, sceneDepth, camera, {
+        velocityNode: sceneVelocity,
         shutterAngle: 180,
+        samples: 32,
+        targetFrameRate: 24, // a film camera's 1/48 s exposure, whatever the display's rate
+        maxBlurRadius: 0.06,
+        noise: 'animated', // TAAU averages it out
       })
+      // The blur drawn at the scene pass's resolution, which TAAU's jitter steps by
+      const blurredTexture = rtt(blurred)
 
-      const params = { blur: true, spin: 3 } // spin: turns per second
+      // The scene pass and the blur at renderPixelRatio; TAAU upscales them to the output's pixel ratio.
+      const sceneScale = () => Math.min(1, params.renderPixelRatio / renderer.getPixelRatio())
+      function setSampling() {
+        const scale = sceneScale()
+        for (const node of [scenePass, blurredTexture]) node.setResolutionScale(scale)
+      }
+      // The output's pixel ratio, and the scene's share of it: a move to another display changes the device's.
+      function setPixelRatio() {
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO))
+        setSampling()
+      }
+      setSampling()
+      window.addEventListener('resize', setPixelRatio)
+
+      let taauNode = null
       const pipeline = new THREE.RenderPipeline(renderer)
+      pipeline.outputColorTransform = false
       function setOutput() {
-        pipeline.outputNode = params.blur ? blurred : sceneColor
+        const image = params.blur ? blurredTexture : sceneColor
         if (params.blur) blurred.resetHistory() // back in the output graph: its history is stale
+        // A TAAU node reads one input for good: a new input gets a new node, with a fresh history.
+        taauNode?.dispose()
+        taauNode = taau(image, sceneDepth, sceneVelocity, camera)
+        pipeline.outputNode = renderOutput(taauNode.getTextureNode())
         pipeline.needsUpdate = true
       }
       setOutput()
 
-      controls.autoRotateSpeed = 10 // a turn in 6 s
+      // ---- GUI ----
 
       const gui = new GUI({ title: 'Motion blur' })
       if (window.innerWidth < 600) gui.close()
       gui.add(params, 'blur').onChange(setOutput)
-      gui.add(blurred, 'shutterAngle', 0, 360, 1)
+      gui.add(blurred, 'shutterAngle', 0, 360, 1).name('shutter angle')
+      gui.add(blurred, 'targetFrameRate', 0, 120, 1).name('target frame rate')
       gui.add(blurred.samples, 'value', 2, 64, 2).name('samples')
-      gui.add(params, 'spin', 0, 5, 0.01)
-      gui.add(controls, 'autoRotate').name('orbit')
+      gui.add(blurred, 'maxBlurRadius', 0.01, 0.12, 0.005).name('max blur radius')
+      const motion = gui.addFolder('Motion')
+      motion.add(params, 'pace', 0, 1.5, 0.01).name('runner pace')
+      motion.add(params, 'wheel', 0, 12, 0.1).name('wheel (turns/s)')
+      motion.add(params, 'pinwheel', 0, 6, 0.01).name('pinwheel (turns/s)')
+      motion.add(params, 'finish', Object.keys(FINISHES)).name('runner finish').onChange(setFinish)
+      const sheetFolder = gui.addFolder('Pinwheel Material')
+      sheetFolder.addColor(sheet, 'front').onChange(setSheet)
+      sheetFolder.addColor(sheet, 'back').onChange(setSheet)
+      sheetFolder.add(sheet, 'roughness', 0, 1, 0.01).onChange(setSheet)
+      sheetFolder.add(sheet, 'specular', 0, 1, 0.01).onChange(setSheet)
+      sheetFolder.add(sheet, 'clearcoat', 0, 1, 0.01).onChange(setSheet)
+      sheetFolder.add(sheet, 'clearcoatRoughness', 0, 1, 0.01).name('clearcoat roughness').onChange(setSheet)
+      const look = gui.addFolder('Camera')
+      look.add(params, 'fov', 15, 70, 1).onChange((value) => {
+        camera.fov = value
+        camera.updateProjectionMatrix()
+      })
+      look.add(params, 'exposure', 0.2, 3, 0.01).onChange((value) => (renderer.toneMappingExposure = value))
+      // Logs the current view as code for the camera's start, and copies it.
+      const view = {
+        log() {
+          const xyz = (vector) => vector.toArray().map((value) => +value.toFixed(3)).join(', ')
+          const code = [
+            `camera.position.set(${xyz(camera.position)})`,
+            `controls.target.set(${xyz(controls.target)})`,
+            `fov: ${camera.fov}`,
+          ].join('\n')
+          console.log(code)
+          navigator.clipboard?.writeText(code).catch(() => {})
+        },
+      }
+      look.add(view, 'log').name('log view')
+      const resolution = gui.addFolder('Resolution')
+      resolution.add(params, 'renderPixelRatio', RENDER_PIXEL_RATIOS).name('render pixel ratio').onChange(setSampling)
+
+      // ---- Loop ----
 
       const timer = new THREE.Timer()
       timer.connect(document)
+      await loading.stage('Compiling shaders…') // shown before the first frame's shader build blocks the page
       renderer.setAnimationLoop((time) => {
         timer.update(time)
-        const delta = timer.getDelta()
-        rotor.rotation.z -= delta * params.spin * Math.PI * 2
+        const delta = Math.min(timer.getDelta(), 1 / 20)
+        blurred.deltaTime = delta // the motion this frame renders
+        mixer.update(delta * params.pace)
+        wheel.rotation.x += delta * params.wheel * Math.PI * 2
+        rotor.rotation.z += delta * params.pinwheel * Math.PI * 2 // the way wind on its face turns it
         controls.update(delta)
         pipeline.render()
         stats.update()
         renderer.resolveTimestampsAsync('render')
       })
+      // off once the scene has drawn: its shaders compile on the first frame, behind the loading screen
+      loading.done()
     </script>
   </body>
 </html>

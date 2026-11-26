@@ -39,7 +39,7 @@ import { taau } from '../../rendering/taau/TAAUNode.js'
  *   })
  *   lab.onReset(() => noodles.reset())               // R, and the GUI's Drop again
  *   lab.onFrame((delta) => noodles.update(lab.renderer, delta))
- *   lab.ready()                                       // the View folder joins the GUI; the loading screen fades out
+ *   lab.ready()                                       // View and Resolution join the GUI; the loading screen fades out
  *
  * Metres, y up. The bench's top is centred on the origin at y = 0, its long side along x, and the floor is
  * `table.height` below: simulations that measure their floor from y = 0, as WormSimulation does without a field, take
@@ -75,10 +75,8 @@ const _box = new THREE.Box3()
 
 // An open hand over what a drag would grab, closed through the drag.
 export const HAND = Object.freeze({ hover: 'grab', drag: 'grabbing' })
-// Pixels per CSS pixel: the output's at most, the scene's, which TAAU upscales to the output's, and the occlusion's.
-const OUTPUT_PIXEL_RATIO = 1.5
-const SCENE_PIXEL_RATIO = 1
-const AO_PIXEL_RATIO = 0.5
+const RENDER_PIXEL_RATIOS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
+const MAX_PIXEL_RATIO = 2 // the output's pixels per CSS pixel at most
 const VIEW = {
   shadows: true,
   light: 3.5,
@@ -88,6 +86,9 @@ const VIEW = {
   ao: true,
   aoIntensity: 1,
   aoRadius: 0.1, // m at a scale of 1
+  // Resolution, as worm-monster's desktop tier: the scene's pixels per CSS pixel, one of RENDER_PIXEL_RATIOS, which TAAU
+  // upscales to the output's; the occlusion runs at half the scene's
+  renderPixelRatio: 1,
 }
 
 export class Lab {
@@ -103,7 +104,7 @@ export class Lab {
   colliders = []
   /** What the shadow map covers: the bench, the floor round it and the air above it. Grow it in place to fit. */
   shadowBounds
-  /** The View folder's settings, applied as they change. */
+  /** The View and Resolution folders' settings, applied as they change. */
   view = { ...VIEW }
 
   /** @type {THREE.WebGPURenderer} */
@@ -262,7 +263,7 @@ export class Lab {
     return this
   }
 
-  /** Ends loading: the View folder joins the GUI, last, and the loading screen fades out. */
+  /** Ends loading: the View and Resolution folders join the GUI, last, and the loading screen fades out. */
   ready() {
     this.#addViewFolder()
     document.getElementById('loading')?.classList.add('done')
@@ -279,7 +280,7 @@ export class Lab {
     const renderer = new THREE.WebGPURenderer({ antialias: false })
     // WebGPU or an error: three's WebGL 2 fallback can't run the simulations' compute shaders.
     renderer._getFallback = null
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, OUTPUT_PIXEL_RATIO))
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO))
     renderer.setSize(window.innerWidth, window.innerHeight)
     renderer.toneMapping = THREE.AgXToneMapping
     renderer.shadowMap.enabled = true
@@ -507,6 +508,11 @@ export class Lab {
       .add(this.view, 'aoRadius', 0.01 * scale, 0.3 * scale, 0.005 * scale)
       .name('occlusion radius (m)')
       .onChange((value) => (this.occlusion.radius = value))
+    const resolution = this.gui.addFolder('Resolution').close()
+    resolution
+      .add(this.view, 'renderPixelRatio', RENDER_PIXEL_RATIOS)
+      .name('render pixel ratio')
+      .onChange(() => this.#setSampling())
   }
 
   // Back far enough to see the bench's width, at most 3.6 m × scale (a portrait phone sees the middle).
@@ -527,18 +533,17 @@ export class Lab {
     this.camera.aspect = window.innerWidth / window.innerHeight
     this.camera.updateProjectionMatrix()
     // a move to another display changes the device's pixel ratio
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, OUTPUT_PIXEL_RATIO))
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO))
     this.renderer.setSize(window.innerWidth, window.innerHeight)
     if (this.pipeline) this.#setSampling()
   }
 
-  // The scene and its prepass at SCENE_PIXEL_RATIO, the occlusion at AO_PIXEL_RATIO: shares of the output's.
+  // The scene and its prepass at renderPixelRatio, the occlusion at half of it: shares of the output's.
   #setSampling() {
-    const ratio = this.renderer.getPixelRatio()
-    const scale = Math.min(1, SCENE_PIXEL_RATIO / ratio)
+    const scale = Math.min(1, this.view.renderPixelRatio / this.renderer.getPixelRatio())
     this.#scenePass.setResolutionScale(scale)
     this.#prePass.setResolutionScale(scale)
-    this.occlusion.resolutionScale = Math.min(1, AO_PIXEL_RATIO / ratio)
+    this.occlusion.resolutionScale = 0.5 * scale
   }
 
   // ---- Input ----
