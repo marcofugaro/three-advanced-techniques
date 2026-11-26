@@ -9,6 +9,7 @@
  *
  *   const generator = new SlicedPMREMGenerator(renderer) // a PMREMGenerator: fromScene() etc. work as in three
  *   generator.samples = 32 // a faster prefilter, a little less exact; null for three's
+ *   await generator.compileAsync(scene, { size: 256 }) // optional: the first generation's pipelines, ahead
  *   const live = generator.fromScene(scene, 0, 0.05, 30, { size: 256, position })
  *   scene.environment = live.texture
  *
@@ -89,6 +90,7 @@ import {
   vec3,
   vec4,
 } from 'three/tsl'
+import { compileQuad } from '../../utils/compileQuad.js'
 
 const OPTION_KEYS = ['sigma', 'near', 'far', 'size', 'position', 'renderTarget', 'facesPerSlice', 'lodsPerSlice']
 
@@ -627,6 +629,58 @@ export class SlicedPMREMGenerator extends PMREMGenerator {
     this.#cubeCamera ??= new CubeCamera(near, far, source)
     this.#job = new SlicedPMREMJob(this, scene, settings, source, slices, this.#cubeCamera)
     return this.#job
+  }
+
+  /**
+   * Builds what fromScene() and fromSceneSliced() render `scene` with at `options.size`, so the first generation
+   * doesn't: the capture into the source cube and the fast prefilter's pass. Takes fromSceneSliced()'s options. Await
+   * it before the first generation; until it settles, render nothing and run no other compile on the renderer. Three's
+   * prefilter, a `sigma` blur and the backend's mipmaps build at their first use.
+   *
+   * @param {Scene} scene
+   * @param {Object} [options]
+   * @returns {Promise<void>}
+   */
+  async compileAsync(scene, options = {}) {
+    for (const key of Object.keys(options)) {
+      if (!OPTION_KEYS.includes(key)) console.warn(`SlicedPMREMGenerator: unknown option "${key}" ignored.`)
+    }
+    const { near = 0.1, far = 100, size = 256 } = options
+    const renderer = this._renderer
+    if (renderer.initialized !== true) await renderer.init()
+    this._setSize(size)
+    const target = this.#back()
+    const source = this.#source()
+    this.#cubeCamera ??= new CubeCamera(near, far, source)
+    const cubeCamera = this.#cubeCamera
+    if (cubeCamera.coordinateSystem !== renderer.coordinateSystem) {
+      cubeCamera.coordinateSystem = renderer.coordinateSystem
+      cubeCamera.updateCoordinateSystem()
+    }
+    // One face, as renderFaces() renders each: the builds read the bound target until the compile settles
+    const renderTarget = renderer.getRenderTarget()
+    const activeCubeFace = renderer.getActiveCubeFace()
+    const activeMipmapLevel = renderer.getActiveMipmapLevel()
+    const background = scene.background
+    let compiling
+    try {
+      if (background === null) scene.background = renderer.getClearColor(_clearColor)
+      renderer.setRenderTarget(source, 0, 0)
+      compiling = renderer.compileAsync(scene, cubeCamera.children[0])
+    } finally {
+      scene.background = background
+    }
+    try {
+      await compiling
+    } finally {
+      renderer.setRenderTarget(renderTarget, activeCubeFace, activeMipmapLevel)
+    }
+    if (this._fastPrefilter(target)) {
+      this.#prefilter ??= createPrefilter()
+      const { mesh, material, uniforms } = this.#prefilter
+      uniforms.envMap.value = source.texture
+      await compileQuad(renderer, mesh, material, this.#atlasTarget(this._cubeSize, target.texture.mipmaps.length))
+    }
   }
 
   /** Frees three's targets and materials, and the back targets; a running job is cancelled. */

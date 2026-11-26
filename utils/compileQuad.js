@@ -3,6 +3,7 @@
  *
  *   await compileQuad(renderer, quad, material, target)      // the pass quad.render() draws into target
  *   await compileQuad(renderer, quad, material, target, 2)   // into mip 2 of target
+ *   await compileQuad(renderer, quad, material, null)        // into the canvas
  *
  * three's `renderer.compileAsync()` calls mustn't overlap, so every compileQuad() queues on the renderer, whichever
  * technique calls it: await any other compileAsync() (a PassNode's) before or after them, not alongside. Each pass
@@ -26,9 +27,11 @@ export function compileQuad(renderer, quad, material, target, mip = 0) {
     const state = RendererUtils.resetRendererState(renderer)
     const { depth, stencil } = renderer
     renderer.setRenderTarget(target, 0, mip)
-    // a render takes depth and stencil from its target, compileAsync() from the renderer
-    renderer.depth = target.depthBuffer
-    renderer.stencil = target.stencilBuffer
+    // a render takes depth and stencil from its target, compileAsync() from the renderer, whose own the canvas has
+    if (target !== null) {
+      renderer.depth = target.depthBuffer
+      renderer.stencil = target.stencilBuffer
+    }
     const restore = () => {
       material.vertexNode = previousVertexNode
       renderer.depth = depth

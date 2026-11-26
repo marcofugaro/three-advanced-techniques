@@ -259,8 +259,9 @@ export declare class RectAreaLightShadow {
   readonly upsampleDepthBiasNode: UniformNode<'float'>
 
   /**
-   * Builds the shadow map's and the prepass's shaders ahead of the first frame. Call it once, after loading; until it
-   * settles, render nothing and run no other compile on the renderer.
+   * Builds every pass's shaders ahead of the first frame: the shadow map, the prepass and the mask's quads, with the
+   * options as they are. Call it once, after loading; until it settles, render nothing and run no other compile on the
+   * renderer.
    */
   compileAsync(renderer: Renderer, scene: Scene, camera: Camera): Promise<void>
   /**

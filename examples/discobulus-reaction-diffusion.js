@@ -82,6 +82,7 @@
 // close-up of a part each, and back: by the button, Esc, or a click off the statue outside debug. A click on the
 // statue, or a touch held there, erases the gold from there, a sphere growing exponentially over almost the whole
 // statue in a second. A window narrower than fitAspect, a phone's, zooms out to keep the statue and the buttons in.
+// The page opens in the head's close-up and orbits out to the overview once the loading screen has faded (zoomIntro).
 // The sweep has twins about the statue, so the camera sees a backdrop whichever way it turns.
 //
 // The camera follows the mouse a little, or a phone's tilt (HoverParallax). No zoom outside debug.
@@ -163,6 +164,7 @@ import {
 import { PrecomputedAmbientOcclusion } from '../rendering/precomputed-lighting/PrecomputedAmbientOcclusion.js'
 import { RectAreaLightShadow, RectAreaLightShadowHelper } from '../rendering/area-light/RectAreaLightShadow.js'
 import { syncUnjitteredProjection, taau } from '../rendering/taau/TAAUNode.js'
+import { compileQuad } from '../utils/compileQuad.js'
 import { PrecomputedRadiosity, TRANSFER_VERSION } from '../rendering/precomputed-lighting/PrecomputedRadiosity.js'
 import { ReactionDiffusionSimulation2D } from '../simulations/reaction-diffusion/ReactionDiffusionSimulation2D.js'
 import {
@@ -228,6 +230,8 @@ const params = {
   // the floor while it passes the statue's side, where it would see the sweep's end
   zoomLift: 40,
   zoomButtonMargin: 64, // px: the least gap between a close-up's × and the window's edge, where it stops
+  // The opening: the camera in the head's close-up, which it orbits out of once the loading screen has faded (reload)
+  zoomIntro: true,
 
   zoomButtonEdgeMargin: 12, // px: the least gap between an overview's button and the window's edge, where it stops
 
@@ -1028,6 +1032,22 @@ const sceneScaleNode = uniform(1)
   .onFrameUpdate(() => scenePass.getResolutionScale())
 const renderPipeline = new THREE.RenderPipeline(renderer)
 renderPipeline.outputColorTransform = false
+
+// three's RenderPipeline builds its output quad at its first render(): built ahead as render() draws it, into the
+// canvas with the renderer's own tone mapping and colour space off, until the build settles
+async function compileOutput(pipeline) {
+  const { renderer } = pipeline
+  pipeline._update()
+  const { toneMapping, outputColorSpace } = renderer
+  renderer.toneMapping = THREE.NoToneMapping
+  renderer.outputColorSpace = THREE.ColorManagement.workingColorSpace
+  try {
+    await compileQuad(renderer, pipeline._quadMesh, pipeline._quadMesh.material, null)
+  } finally {
+    renderer.toneMapping = toneMapping
+    renderer.outputColorSpace = outputColorSpace
+  }
+}
 
 const taauNode = taau(
   scenePass.getTextureNode('output'),
@@ -2576,6 +2596,12 @@ class StudioEnvironment {
     this.scene.add(this.#sweepCopy, dome)
   }
 
+  /** Builds what the first update() renders and computes with, the PMREM's and the probes', as prepare() read them. */
+  async compileAsync() {
+    await this.#pmrem.compileAsync(this.scene, this.#sliceOptions())
+    await this.probes.compileAsync(this.#renderer, this.scene)
+  }
+
   /** Whether a regeneration has a slice to run: the scheduler's 'environment' job. */
   get pending() {
     if (!params.envEnabled || this.target === null) return false
@@ -2654,17 +2680,24 @@ class StudioEnvironment {
 
   /**
    * Per frame, after prepare() and the scheduler's plan: regenerates when due, a slice of a run in a frame that
-   * `granted` the environment; and makes the PMREM the lit scene's environment, or none while params.envEnabled is off.
+   * `granted` the environment, or all of it at once while `whole`; and makes the PMREM the lit scene's environment, or
+   * none while params.envEnabled is off.
    *
    * @param {boolean} [granted=false] - Whether the scheduler granted the 'environment' job this frame.
+   * @param {boolean} [whole=false] - Whether a regeneration runs at once: no frame shows what it costs.
    */
-  update(granted = false) {
+  update(granted = false, whole = false) {
     if (params.envEnabled) {
       if (this.target === null) {
         this.#generate()
         // A run's back target and the passes and bindings it renders with, built with the first generation rather
         // than in the first run; its result is not shown
         this.#pmrem.fromSceneSliced(this.scene, this.#sliceOptions()).finish()
+      } else if (whole && this.#startable) {
+        // in place of a run, and of one in progress; the probes follow below
+        this.#cancel()
+        this.#generate()
+        this.#decide()
       }
       // The probes with the first generation at once, and at once for a new column or new heights, between runs
       if (this.#job === null && !this.#probesCurrent()) {
@@ -3557,6 +3590,9 @@ class StatueInterreflection {
   #updatedVersion = -1
   #updatedTransfer = null
   #dirty = false
+  // Whether the radiosity's compile runs, and the transfer, irradiance and bounces the last one built for
+  #compiling = false
+  #compiled = []
 
   constructor(statue, environment) {
     this.#statue = statue
@@ -3588,9 +3624,9 @@ class StatueInterreflection {
     return !params.envEnabled || this.#environment.current
   }
 
-  /** Whether a recompute waits for a frame of its own: the 'bounce' job. */
+  /** Whether a recompute waits for a frame of its own, its pipelines built: the 'bounce' job. */
   get dirty() {
-    return params.interreflectionEnabled && this.#dirty
+    return params.interreflectionEnabled && this.#dirty && !this.#compiling
   }
 
   /**
@@ -3642,6 +3678,23 @@ class StatueInterreflection {
     if (inputs !== this.#inputs) {
       this.#inputs = inputs
       radiosity.needsUpdate = true
+    }
+    // Pipelines not built for the transfer, the irradiance or the bounces: their compile first, which the recompute
+    // waits for, dirty meanwhile
+    const built = [radiosity.transfer, radiosity.irradiance, radiosity.bounces]
+    if (radiosity.transfer !== null && !this.#compiling && built.some((value, k) => value !== this.#compiled[k])) {
+      this.#compiled = built
+      this.#compiling = true
+      radiosity
+        .compileAsync(renderer)
+        .catch((error) => {
+          console.warn(`discobulus: the interreflection's pipelines build at first use: ${error.message}`)
+        })
+        .finally(() => (this.#compiling = false))
+    }
+    if (this.#compiling) {
+      this.#dirty = true
+      return
     }
     if (held) {
       // an input changed, or a transfer landed, since the last update(): the next frame recomputes
@@ -4132,7 +4185,6 @@ const scheduler = new FrameScheduler()
 
 const interreflection = new StatueInterreflection(statue, environment)
 
-await bakeFileRead
 const bakes = new StatueBakes(statue, sweep, interreflection.radiosity, masks, transfer, renderer, bakeFile)
 
 // The masks' compute pipelines, built ahead by their compileAsync() whenever what it builds from changes: their data,
@@ -4665,34 +4717,22 @@ class ZoomButtons {
    * camera's own pose, so the parallax never counts twice.
    */
   update(dt) {
-    const camera = this.#camera
     if (this.#requested) {
       this.#requested = false
       this.#move(this.#requestedView)
     }
     if (this.#t < 1) {
       this.#t = Math.min(this.#t + dt / Math.max(params.zoomDuration, 1e-3), 1)
-      const t = this.#t
-      const e = 1 - (1 - t) ** params.zoomEasePower
-      this.#eased = e
-      const from = this.#from
-      const to = this.#to
-      const target = this.#controls.target.lerpVectors(from.target, to.target, e)
-      const s = this.#spherical
-      s.radius = Math.exp(THREE.MathUtils.lerp(Math.log(from.spherical.radius), Math.log(to.spherical.radius), e))
-      const phi = THREE.MathUtils.lerp(from.spherical.phi, to.spherical.phi, e) - this.#lift * Math.sin(Math.PI * e)
-      s.phi = THREE.MathUtils.clamp(phi, 0.05, Math.PI - 0.05)
-      s.theta = from.spherical.theta + ZoomButtons.#turn(from.spherical.theta, to.spherical.theta) * e
-      camera.position.setFromSpherical(s).add(target)
-      camera.lookAt(target)
-      this.#fov = THREE.MathUtils.lerp(from.fov, to.fov, e)
-      if (t === 1 && this.#zoomed === null) this.#fov = null
-      const fov = fittedFov(this.#fov ?? params.fov)
-      if (camera.fov !== fov) {
-        camera.fov = fov
-        camera.updateProjectionMatrix()
-      }
+      this.#apply(1 - (1 - this.#t) ** params.zoomEasePower)
     }
+  }
+
+  /** Puts the camera in a view's close-up at once, the overview it zooms out to being where the camera is now. */
+  jumpTo(view) {
+    this.#statue.updateWorldMatrix(true, false)
+    this.#move(view)
+    this.#t = 1
+    this.#apply(1)
   }
 
   /** Per frame, once the camera is where it renders from: the buttons beside their parts. */
@@ -4750,6 +4790,29 @@ class ZoomButtons {
     this.#zoomed = view
     this.#t = 0
     this.#eased = 0
+  }
+
+  // The camera and the fov `e` of the eased way through the move
+  #apply(e) {
+    const camera = this.#camera
+    this.#eased = e
+    const from = this.#from
+    const to = this.#to
+    const target = this.#controls.target.lerpVectors(from.target, to.target, e)
+    const s = this.#spherical
+    s.radius = Math.exp(THREE.MathUtils.lerp(Math.log(from.spherical.radius), Math.log(to.spherical.radius), e))
+    const phi = THREE.MathUtils.lerp(from.spherical.phi, to.spherical.phi, e) - this.#lift * Math.sin(Math.PI * e)
+    s.phi = THREE.MathUtils.clamp(phi, 0.05, Math.PI - 0.05)
+    s.theta = from.spherical.theta + ZoomButtons.#turn(from.spherical.theta, to.spherical.theta) * e
+    camera.position.setFromSpherical(s).add(target)
+    camera.lookAt(target)
+    this.#fov = THREE.MathUtils.lerp(from.fov, to.fov, e)
+    if (this.#t === 1 && this.#zoomed === null) this.#fov = null
+    const fov = fittedFov(this.#fov ?? params.fov)
+    if (camera.fov !== fov) {
+      camera.fov = fov
+      camera.updateProjectionMatrix()
+    }
   }
 
   // The turn from one azimuth to another, the shorter way round
@@ -5353,21 +5416,28 @@ const settled = (deferred = true) =>
   masksPrewarm.current
 
 sync()
-// The first PMREM, which compiles its own pipelines, before the scene's: the marble then compiles once, with it
+// The opening's close-up, once sync() has turned the statue
+if (params.zoomIntro) zoomButtons.jumpTo(ZOOM_VIEWS.find((view) => view.name === 'Head'))
+// The first PMREM and the probes, their pipelines built ahead, before the scene's: the marble then compiles once, with
+// them
 environment.prepare(motion)
+await environment.compileAsync()
 environment.update()
-// The key shadow's own passes, then the scene's, which read its mask
+// The key shadow's own passes, then the scene's, which read its mask, and the output's, which reads TAAU's
 await keyShadow.compileAsync(renderer, scene, camera)
 await scenePass.compileAsync(renderer)
 await taauNode.compileAsync(renderer)
+await compileOutput(renderPipeline)
 // And the reaction diffusion's computes, which its first update() would build at once
 await rd.compileAsync(renderer)
 
-// After the shaders: the bakes' main-thread setup would hold up the compile. The contact occlusion, then the statue's
-// occlusion, the visibility masks, their motion spread and the interreflection's transport.
+// After the shaders, which compile while the bake file downloads, and which the bakes' main-thread setup would hold
+// up: the bake file, then the contact occlusion, the statue's occlusion, the visibility masks, their motion spread and
+// the interreflection's transport.
 await loading.stage('Polishing marble…')
+await bakeFileRead
 bakes.update()
-// The loading screen shows until the load first settles and the motion prewarm has run
+// The loading screen shows until the load first settles, the motion prewarm has run and the load has settled again
 let loaded = false
 
 const timer = new THREE.Timer()
@@ -5401,13 +5471,16 @@ renderer.setAnimationLoop((timestamp) => {
   // What the environment shows now, then the frame's one job
   environment.prepare(motion)
   scheduler.plan()
-  // A slice of the refine in a frame granted it, held in the others; with 0 steps all of it in its first still frame
+  // A slice of the refine in a frame granted it, held in the others; with 0 steps, or behind the loading screen, all of
+  // it in its first still frame
   const refineSteps = Math.max(Math.round(params.selfShadowMaskRefineSteps), 0)
-  masks.refineSteps = refineSteps === 0 ? Infinity : scheduler.granted('refine') ? refineSteps : 0
+  masks.refineSteps = refineSteps === 0 || !loaded ? Infinity : scheduler.granted('refine') ? refineSteps : 0
   masks.refineParts = Math.max(Math.round(params.selfShadowMaskRefineParts), 1)
   // Stats Compute Timing off leaves the computes untimed, and the environment's captures among them
   const untimedCompute = renderer.backend.trackTimestamp && !params.statsComputeTiming
   if (untimedCompute) renderer.backend.trackTimestamp = false
+  // Before the masks' first write, their compile, which the write waits for: no frame builds their pipelines
+  if (masks.version === 0) masksPrewarm.update(renderer)
   if (masksShade()) masks.update(renderer)
   // Or the transfer, which writes all of the attribute in the frame it takes it over. Once neither shades, the
   // attribute's CPU array, all ones, is uploaded again; the masks taking over write all of it themselves.
@@ -5424,7 +5497,8 @@ renderer.setAnimationLoop((timestamp) => {
   transferShaded = transferred
   // After the write, which a compile would hold: the pipelines a later update() may build
   masksPrewarm.update(renderer)
-  environment.update(scheduler.granted('environment'))
+  // Behind the loading screen, a regeneration at once rather than a slice a frame
+  environment.update(scheduler.granted('environment'), !loaded)
   // The bounce's compute, after every pose and the environment; while still, a change in a frame another job took waits
   // for the next, the 'bounce' job's
   const bounceHeld = motion.quietFrames > 0 && scheduler.current !== null && !scheduler.granted('bounce')
@@ -5443,10 +5517,20 @@ renderer.setAnimationLoop((timestamp) => {
   if (untimedCompute) renderer.backend.trackTimestamp = true
   // At the load's first settle, the motion prewarm
   if (!motionPrewarm.done && settled(false)) motionPrewarm.start(params.motionPrewarmFrames)
-  if (!loaded && motionPrewarm.done) {
+  // Then settled again, the masks refined after it: the opening's orbit runs in frames as still as a click's
+  if (!loaded && motionPrewarm.done && settled(false)) {
     loaded = true
     bakes.holdMotionKernel = false
     loading.done()
+    // The opening's orbit out to the overview, once the loading screen has faded off the close-up
+    if (params.zoomIntro) {
+      const faded = (event) => {
+        if (event.target !== loading || event.propertyName !== 'opacity') return
+        loading.removeEventListener('transitionend', faded)
+        zoomButtons.zoomOut()
+      }
+      loading.addEventListener('transitionend', faded)
+    }
   }
 
   // The caster casts while the statue shows

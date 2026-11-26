@@ -9,6 +9,7 @@
  *   const radiosity = new PrecomputedRadiosity(mesh, { lights: [rectAreaLight, sun], albedo: 0xe7e7e7, bounces: 2 })
  *   const transfer = await radiosity.bake({ rays: 256, patches: 4096 }) // in workers; cache it, or:
  *   radiosity.setTransfer(cachedTransfer)
+ *   await radiosity.compileAsync(renderer) // optional: the first update()'s pipelines, ahead
  *   material.emissiveNode = diffuseColor.rgb.mul(radiosity.irradianceNode).div(Math.PI) // see below
  *   renderer.setAnimationLoop(() => {
  *     radiosity.update(renderer) // recomputes only when an input changed
@@ -629,6 +630,29 @@ export class PrecomputedRadiosity {
     this.#signature = signature
     this.#updates++
     return true
+  }
+
+  /**
+   * Builds the pipelines update() dispatches with for the transfer, `irradiance` and `bounces` as they are, so the
+   * first update() after them doesn't. Nothing to build before a transfer. Until it settles, leave them, the lights and
+   * the mesh as they are.
+   *
+   * @param {WebGPURenderer} renderer
+   * @returns {Promise<void>}
+   */
+  async compileAsync(renderer) {
+    if (this.#disposed) throw new Error(`${NAME}: compileAsync() after dispose().`)
+    if (!renderer?.isRenderer) throw new TypeError(`${NAME}: compileAsync(renderer) needs the WebGPURenderer.`)
+    if (!this.#renderers.includes(renderer)) this.#renderers.push(renderer)
+    if (this.#transfer === null) return
+    const bounces = this.bounces
+    if (!Number.isInteger(bounces) || bounces < 1 || bounces > MAX_BOUNCES) {
+      throw new TypeError(`${NAME}: bounces must be a whole number in 1 … ${MAX_BOUNCES} (got ${bounces}).`)
+    }
+    if (renderer.initialized !== true) await renderer.init()
+    this.#passes ??= this.#buildPasses()
+    this.#direct ??= this.#buildDirect()
+    await renderer.compileComputeAsync(this.#dispatchList(bounces))
   }
 
   /** The bounce irradiance E_b per vertex, rgb, as of the last update. */

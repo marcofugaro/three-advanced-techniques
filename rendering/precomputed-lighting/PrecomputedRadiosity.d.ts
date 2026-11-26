@@ -152,6 +152,11 @@ export declare class PrecomputedRadiosity {
    * its attribute, the bounces. Call it every frame; returns whether it recomputed.
    */
   update(renderer: Renderer): boolean
+  /**
+   * Builds the pipelines update() dispatches with for the transfer, irradiance and bounces as they are; nothing before
+   * a transfer. Until it settles, leave them, the lights and the mesh as they are.
+   */
+  compileAsync(renderer: Renderer): Promise<void>
   /** The bounce irradiance per vertex, rgb. */
   readIrradianceAsync(renderer: Renderer): Promise<Float32Array>
   /** The direct radiosity (albedo × direct irradiance) per vertex, rgb. */

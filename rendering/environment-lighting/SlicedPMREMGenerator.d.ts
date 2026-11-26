@@ -102,4 +102,11 @@ export declare class SlicedPMREMGenerator extends PMREMGenerator {
    * a finished one before starting the next.
    */
   fromSceneSliced(scene: Scene, options?: SlicedPMREMOptions): SlicedPMREMJob
+
+  /**
+   * Builds what `fromScene()` and `fromSceneSliced()` render `scene` with at `options.size`: the capture and the fast
+   * prefilter's pass. Await it before the first generation; until it settles, render nothing and run no other compile
+   * on the renderer. Three's prefilter, a `sigma` blur and the backend's mipmaps build at their first use.
+   */
+  compileAsync(scene: Scene, options?: SlicedPMREMOptions): Promise<void>
 }

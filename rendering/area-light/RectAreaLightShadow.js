@@ -141,6 +141,7 @@ import {
   renderObjectWithSourceAlpha,
 } from './utils/MotionVectorMaterial.js'
 import './rectAreaLTC.js' // three's RectAreaLight, with its LTC tables
+import { compileQuad } from '../../utils/compileQuad.js'
 import { expandByAnimatedObject, getSkinnedDisplacementBound } from './utils/skinnedMeshBounds.js'
 
 const _quadMesh = /*@__PURE__*/ new THREE.QuadMesh()
@@ -277,6 +278,48 @@ function objectCompileGroupOf(object, shadow) {
     group = own
   }
   return group
+}
+
+// A source the prepass draws through its override under a pass id of its own, with its alpha node (from a colorNode
+// or a maskNode), its positionNode or its displacementMap: compileAsync() builds it in a call of its own. Null for any
+// other, for an alpha test or an alphaMap (an override of their own) and for a transparent DoubleSide source, which
+// three draws in two passes.
+function ownPrepassSource(object) {
+  if (object.isMesh !== true || Array.isArray(object.material)) return null
+  const material = object.material
+  if (material.allowOverride !== true || material.visible === false) return null
+  if (material.alphaTest > 0 || material.alphaMap?.isTexture === true) return null
+  const transparency = copiedTransparency(material)
+  if (TRANSPARENCIES.indexOf(transparency) < 0) return null
+  if (transparency && material.side === THREE.DoubleSide && material.forceSinglePass === false) return null
+  const own =
+    getSourceAlphaNode(material) !== null ||
+    material.positionNode?.isNode === true ||
+    material.displacementMap?.isTexture === true
+  return own ? material : null
+}
+
+// renderer.compileAsync() queues its draws through renderer.renderObject(), whatever setRenderObjectFunction() set:
+// `draw` takes its place for the call's synchronous part, and reaches the renderer's own from within.
+function compileThrough(renderer, draw, compile) {
+  const own = Object.hasOwn(renderer, 'renderObject') ? renderer.renderObject : undefined
+  const base = renderer.renderObject
+  let drawing = false
+  renderer.renderObject = function (...args) {
+    if (drawing) return base.apply(this, args)
+    drawing = true
+    try {
+      draw(...args)
+    } finally {
+      drawing = false
+    }
+  }
+  try {
+    return compile()
+  } finally {
+    if (own === undefined) delete renderer.renderObject
+    else renderer.renderObject = own
+  }
 }
 
 // A 1×1 RGBA texture of one grey level: white is the unshadowed mask.
@@ -1863,14 +1906,14 @@ export class RectAreaLightShadow {
   }
 
   /**
-   * Builds what the shadow map and the prepass draw with, so the first frame doesn't: measures the casters as
-   * `render()` does, then compiles each pass's override for the sources it draws through it as it is, from the shadow
-   * camera and from `camera`. Call it once, after loading and before the first `render()`. The passes' renderer and
-   * scene state holds until it settles, so until then render nothing and run no `renderer.compileAsync()`. Calls on one
-   * renderer, from any instance, run one after another. Like `renderer.compileAsync()`, it advances three's frame id.
-   * A source with an alpha test or an `alphaMap`, a `colorNode`, a `maskNode` or (in the shadow map) a
-   * `castShadowNode`, a `positionNode` or a `displacementMap` still builds at its first draw, as do the pipelines of a
-   * transparent DoubleSide source, which three draws in two passes.
+   * Builds what every pass of `render()` draws with, so the first frame doesn't: measures the casters as `render()`
+   * does, compiles each pass's override for the sources it draws, from the shadow camera and from `camera`, then the
+   * mask's quads, with the options as they are. Call it once, after loading and before the first `render()`. The
+   * passes' renderer and scene state holds until it settles, so until then render nothing and run no
+   * `renderer.compileAsync()`. Calls on one renderer, from any instance, run one after another. Like
+   * `renderer.compileAsync()`, it advances three's frame id. A source with an alpha test or an `alphaMap` or, in the
+   * shadow map, a `colorNode`, a `maskNode`, a `castShadowNode`, a `positionNode` or a `displacementMap` still builds
+   * at its first draw, as do the pipelines of a transparent DoubleSide source, which three draws in two passes.
    *
    * @param {THREE.WebGPURenderer} renderer
    * @param {THREE.Scene} scene
@@ -1903,6 +1946,22 @@ export class RectAreaLightShadow {
       } finally {
         camera.layers.mask = layers
       }
+      // The mask's quads, reading and writing the targets render() binds them to: their formats pick the shaders
+      const factorRT = this.#rawFactorRT ?? this.#factorRTs[0]
+      await compileQuad(renderer, _quadMesh, this.#shadowFactorMaterial, factorRT)
+      let source = factorRT.texture
+      this.#blurLengthTextureNode.value = this.#longHistoryTexture
+      if (this.#temporalAccumulation) {
+        this.#factorReadNode.value = factorRT.texture
+        this.#historyReadNode.value = this.#historyRTs[1].texture
+        await compileQuad(renderer, _quadMesh, this.#temporalMaterial, this.#historyRTs[0])
+        source = this.#historyRTs[0].texture
+        this.#blurLengthTextureNode.value = source
+      }
+      if (this.#blurEnabled && this.#blurIterations > 0) {
+        this.#blurInputTextureNode.value = source
+        await compileQuad(renderer, _quadMesh, this.#blurMaterial, this.#factorRTs[this.#temporalAccumulation ? 0 : 1])
+      }
     } finally {
       this.#endPasses(renderer, scene, state)
     }
@@ -1912,7 +1971,8 @@ export class RectAreaLightShadow {
   // one renderer.compileAsync() per objectCompileGroupOf(). Its synchronous part copies each source's alphaTest,
   // alphaMap and transparent onto the override, and every build after it reads the last ones copied, so each call
   // sees one group's objects, the others taken off every layer meanwhile, and the override keeps the group's side until
-  // the call settles.
+  // the call settles. In the prepass, then, each ownPrepassSource() in a call of its own, drawn as render() draws it,
+  // the override keeping its positionNode and displacement until the call settles.
   async #compilePass(renderer, scene, camera, override, shadow) {
     const objects = []
     const groups = []
@@ -1944,9 +2004,45 @@ export class RectAreaLightShadow {
         }
         await compiling
       }
+      if (!shadow) await this.#compileOwnSources(renderer, scene, camera, override, objects, masks)
     } finally {
       override.side = side
       override.transparent = transparent
+    }
+  }
+
+  // #compilePass()'s ownPrepassSource()s, one call each
+  async #compileOwnSources(renderer, scene, camera, override, objects, masks) {
+    const { colorNode, positionNode, displacementMap, displacementScale, displacementBias } = override
+    // as #meshesOnly draws
+    const draw = (object, ...args) => {
+      if (object.isMesh === true) renderObjectWithSourceAlpha(renderer, object, ...args)
+    }
+    for (let k = 0; k < objects.length; k++) {
+      const material = ownPrepassSource(objects[k])
+      if (material === null) continue
+      let compiling
+      try {
+        for (let i = 0; i < objects.length; i++) objects[i].layers.mask = i === k ? masks[i] : 0
+        override.side = material.side
+        override.colorNode = getSourceAlphaNode(material) ?? colorNode
+        override.positionNode = material.positionNode?.isNode === true ? material.positionNode : positionNode
+        override.displacementMap = material.displacementMap
+        override.displacementScale = material.displacementScale
+        override.displacementBias = material.displacementBias
+        compiling = compileThrough(renderer, draw, () => renderer.compileAsync(scene, camera))
+      } finally {
+        for (let i = 0; i < objects.length; i++) objects[i].layers.mask = masks[i]
+      }
+      try {
+        await compiling
+      } finally {
+        override.colorNode = colorNode
+        override.positionNode = positionNode
+        override.displacementMap = displacementMap
+        override.displacementScale = displacementScale
+        override.displacementBias = displacementBias
+      }
     }
   }
 

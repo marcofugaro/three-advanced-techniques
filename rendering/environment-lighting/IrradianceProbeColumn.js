@@ -9,6 +9,7 @@
  *
  *   const probes = new IrradianceProbeColumn([0.25, 0.85, 1.45]) // heights along local +y
  *   probes.position.set(pivot.x, 0, pivot.z) // the axis: the column's position and +y
+ *   await probes.compileAsync(renderer, environmentScene) // optional: the first update()'s pipelines, ahead
  *   probes.update(renderer, environmentScene) // capture + projection, on the GPU; again whenever the scene changes
  *
  *   // or the same spread over frames: a probe's faces a call, then one projection; bit for bit update()'s
@@ -372,6 +373,49 @@ export class IrradianceProbeColumn extends Object3D {
   project(renderer) {
     this.#place(renderer, 'project')
     this.#project(renderer)
+  }
+
+  /**
+   * Builds what update(), capture() and project() render and compute with, so the first update() doesn't: the capture
+   * of `scene`, into cubes that share one format, and the projection. Await it before the first update(); until it
+   * settles, render nothing and run no other compile on the renderer.
+   *
+   * @param {WebGPURenderer} renderer
+   * @param {Object3D} scene
+   * @returns {Promise<void>}
+   */
+  async compileAsync(renderer, scene) {
+    if (this.#disposed) throw new Error('IrradianceProbeColumn: compileAsync() after dispose().')
+    if (renderer.initialized !== true) await renderer.init()
+    if (!this.#renderers.includes(renderer)) this.#renderers.push(renderer)
+    const camera = this.#cubeCameras[0]
+    if (camera.coordinateSystem !== renderer.coordinateSystem) {
+      camera.coordinateSystem = renderer.coordinateSystem
+      camera.updateCoordinateSystem()
+    }
+    // One face, as capture() renders each, the helpers hidden: the builds read the bound target until the compile
+    // settles
+    const helpers = [...(helpersOf.get(this) ?? [])]
+    const shown = helpers.map((helper) => helper.visible)
+    const renderTarget = renderer.getRenderTarget()
+    const activeCubeFace = renderer.getActiveCubeFace()
+    const activeMipmapLevel = renderer.getActiveMipmapLevel()
+    let compiling
+    try {
+      for (const helper of helpers) helper.visible = false
+      renderer.setRenderTarget(this.#renderTargets[0], 0, 0)
+      compiling = renderer.compileAsync(scene, camera.children[0])
+    } finally {
+      helpers.forEach((helper, k) => {
+        helper.visible = shown[k]
+      })
+    }
+    try {
+      await compiling
+    } finally {
+      renderer.setRenderTarget(renderTarget, activeCubeFace, activeMipmapLevel)
+    }
+    await renderer.compileComputeAsync([...this.#projections, this.#reduction])
   }
 
   /**

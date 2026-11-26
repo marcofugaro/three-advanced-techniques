@@ -93,6 +93,11 @@ export declare class IrradianceProbeColumn extends Object3D {
   capture(renderer: Renderer, scene: Object3D, index: number, options?: IrradianceProbeCaptureOptions): void
   /** Projects every probe's capture to its coefficients, on the GPU, placing the probes where the column stands now. */
   project(renderer: Renderer): void
+  /**
+   * Builds what `update()`, `capture()` and `project()` render and compute with. Await it before the first
+   * `update()`; until it settles, render nothing and run no other compile on the renderer.
+   */
+  compileAsync(renderer: Renderer, scene: Object3D): Promise<void>
 
   /**
    * The irradiance at a point and a unit world normal, blended between the probes around the point's height: what
