@@ -9,17 +9,6 @@
     <link rel="preload" href="./discobulus-reaction-diffusion.bake" as="fetch" crossorigin />
     <link rel="preload" href="./models/discobulus.glb" as="fetch" crossorigin />
     <link rel="preload" href="./models/discobulus-isotropic.glb" as="fetch" crossorigin />
-    <!-- The modules that only the CDN modules import, fetched at once rather than a round trip after their importers -->
-    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.core.js" />
-    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/utils/BufferGeometryUtils.js" />
-    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/utils/SkeletonUtils.js" />
-    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/stats-gl@4.2.3/dist/core.js" />
-    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/stats-gl@4.2.3/dist/panel.js" />
-    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/stats-gl@4.2.3/dist/panelTexture.js" />
-    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/stats-gl@4.2.3/dist/panelVsync.js" />
-    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/stats-gl@4.2.3/dist/profiler.js" />
-    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/stats-gl@4.2.3/dist/statsGLNode.js" />
-    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/stats-gl@4.2.3/dist/textureCapture.js" />
     <style>
       /* The backdrop as it renders, top to bottom, so the page matches it before the first frame */
       html {
@@ -152,12 +141,17 @@
           "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.tsl.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/",
           "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.21.0/dist/lil-gui.esm.js",
-          "stats-gl": "https://cdn.jsdelivr.net/npm/stats-gl@4.2.3/dist/main.js",
+          "stats-gl": "https://cdn.jsdelivr.net/npm/stats-gl@4.2.3/+esm",
           "three-mesh-bvh": "https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.9.15/build/index.module.js",
           "meshoptimizer/encoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@1.2.0/meshopt_encoder.js"
         }
       }
     </script>
+    <!-- After the import map, which must come before any module load: the modules that only three's import, fetched at
+         once rather than a round trip after their importers -->
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.core.js" />
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/utils/BufferGeometryUtils.js" />
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/utils/SkeletonUtils.js" />
     <script src="../utils/loading.js"></script>
   </head>
   <body>
