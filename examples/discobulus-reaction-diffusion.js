@@ -87,12 +87,19 @@
 //
 // The camera follows the mouse a little, or a phone's tilt (HoverParallax). No zoom outside debug.
 //
+// The lighting breakdown, by B, the GUI's Lighting Breakdown or ?breakdown: a panel on the right that stacks the
+// statue's lighting as layers over three.js's direct lighting, its two rect lights as three shades them, up to the
+// reaction diffusion on top (LIGHTING_LAYERS). Its vertical slider scrubs through them, a tap on a layer moves it
+// there, ↑ and ↓ step. Each layer fades through the uniforms that scale its terms, so none rebuilds a shader, and the
+// bounce recomputes from the light shown. While it shows, the view frames the statue in the rest of the window
+// (framing).
+//
 // Debug shows the GUI, for the simulation's, the gold's and the lights' params, and stats-gl, and frees the orbit and
-// the zoom. Keys: P debug · R regrow · Esc zoom out · in debug, O logs the camera's coordinates and its view as a
-// ZOOM_VIEWS entry
-// URL parameters set params before anything is built: ?debug=true&rdStepsPerSecond=400. The loading screen covers the
-// load until every bake but the motion tier's spread has landed, a few seconds with the bake files and about 16 s on a
-// Mac mini without them, and the growth starts as it fades.
+// the zoom. Keys: P debug · R regrow · B breakdown · Esc zoom out · in debug, O logs the camera's coordinates and its
+// view as a ZOOM_VIEWS entry
+// URL parameters set params before anything is built: ?debug=true&rdStepsPerSecond=400, and a bare flag sets true:
+// ?breakdown. The loading screen covers the load until every bake but the motion tier's spread has landed, a few
+// seconds with the bake files and about 16 s on a Mac mini without them, and the growth starts as it fades.
 
 import * as THREE from 'three/webgpu'
 import {
@@ -185,6 +192,9 @@ import { SlicedPMREMGenerator } from '../rendering/environment-lighting/SlicedPM
 // The marble's params follow a studio recipe, as verified in Cycles on this statue.
 const params = {
   debug: false, // P: stats-gl and a free orbit
+  // B: the lighting breakdown's panel, which scrubs and toggles the statue's lighting layers (LIGHTING_LAYERS)
+  breakdown: false,
+  breakdownEase: 10, // 1/s: how fast a layer fades in or out, and the view reframes about the panel
   // stats-gl's compute panel (reload). Off, the computes go untimed, so a frame that runs one makes no compute
   // timestamp readback. GPU timestamps run only while the stats show.
   statsComputeTiming: true,
@@ -749,15 +759,38 @@ for (const [key, text] of search) {
   const current = params[key]
   let value = text
   if (typeof current === 'number') value = text.trim() === '' ? Number.NaN : Number(text)
-  else if (typeof current === 'boolean') value = text === 'true' || text === '1'
+  else if (typeof current === 'boolean') value = text === '' || text === 'true' || text === '1'
   let valid
   if (Object.hasOwn(URL_OPTIONS, key)) valid = URL_OPTIONS[key].includes(value)
   else if (typeof current === 'number') valid = Number.isFinite(value)
-  else if (typeof current === 'boolean') valid = ['true', 'false', '1', '0'].includes(text)
+  else if (typeof current === 'boolean') valid = ['', 'true', 'false', '1', '0'].includes(text)
   else valid = HEX_COLOR.test(current) && HEX_COLOR.test(value)
   if (valid) params[key] = value
   else console.warn(`discobulus-reaction-diffusion: ignored ?${key}=${text}`)
 }
+
+// ─── Lighting layers ─────────────────────────────────────────────────────────
+
+// The statue's lighting as layers over three.js's direct lighting, bottom to top, which the breakdown panel scrubs and
+// toggles. Each scales what it adds by its weight, through the uniforms that already scale it.
+const LIGHTING_LAYERS = [
+  // the environment's intensity, on the marble and in the light it bounces
+  { key: 'environment', name: 'Environment', detail: 'Reflection map, irradiance probes' },
+  // the marble's tabulated horizon clip, blended back to three's analytic one, and its energy conservation
+  { key: 'areaLights', name: 'Accurate Area Lights', detail: 'Tabulated clip, energy conservation' },
+  // selfShadowAmount, on the marble and in the light it bounces, and castShadowAmount, the key's shadow on the sweep
+  { key: 'selfShadow', name: 'Self Shadow', detail: 'Visibility masks, floor shadow' },
+  // the statue's ambient occlusion, also in the light it bounces, and the sweep's contact occlusion on screen
+  { key: 'occlusion', name: 'Ambient Occlusion', detail: 'Precomputed, statue and floor' },
+  // the bounce's amplitude
+  { key: 'interreflection', name: 'Interreflection', detail: 'Precomputed radiosity' },
+  // the gold and its relief; the simulation runs on
+  { key: 'reactionDiffusion', name: 'Reaction Diffusion', detail: 'Gray-Scott, in gold' },
+]
+// Each layer's weight by key: 1 shown, as with no panel, 0 left out. The panel eases them.
+const layerWeights = Object.fromEntries(LIGHTING_LAYERS.map(({ key }) => [key, 1]))
+// m: the reaction diffusion's relief as its layer shows it
+const rdDisplacement = () => (params.rdDisplacementAmplitude / 1000) * layerWeights.reactionDiffusion
 
 // ─── Loading screen ──────────────────────────────────────────────────────────
 
@@ -1107,12 +1140,35 @@ addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight)
 })
 
-// The camera's vertical fov for a view's `fov`, composed at fitAspect or wider: in a narrower window, wider by as
-// much as keeps the horizontal fov fitAspect gives it
-function fittedFov(fov, aspect = camera.aspect) {
-  if (aspect >= params.fitAspect) return fov
+// The px the breakdown panel takes off the window's right or top, which the view frames the statue beside: its fov
+// fits the rest (fittedFov) and a lens shift centres it there. Eased by the panel; 0 and 0 without it.
+const framing = { right: 0, top: 0 }
+
+// The lens shift, through every rebuild of the projection, TAAU's jittered ones too
+{
+  const updateProjectionMatrix = camera.updateProjectionMatrix
+  camera.updateProjectionMatrix = function () {
+    updateProjectionMatrix.call(this)
+    if (framing.right === 0 && framing.top === 0) return
+    // The view's centre moved to the framed part's, left by half the right inset and down by half the top one, in NDC
+    const elements = this.projectionMatrix.elements
+    elements[8] += framing.right / innerWidth
+    elements[9] += framing.top / innerHeight
+    this.projectionMatrixInverse.copy(this.projectionMatrix).invert()
+  }
+}
+
+// The camera's vertical fov for a view's `fov`, composed at fitAspect or wider in the framed part: in a narrower one,
+// wider by as much as keeps the horizontal fov fitAspect gives it; then over the window's height
+function fittedFov(fov) {
+  const framed = framing.right !== 0 || framing.top !== 0
+  const height = innerHeight - framing.top
+  const aspect = framed ? (innerWidth - framing.right) / height : camera.aspect
+  if (aspect >= params.fitAspect && !framed) return fov
   const { degToRad, radToDeg } = THREE.MathUtils
-  return radToDeg(2 * Math.atan((Math.tan(degToRad(fov) / 2) * params.fitAspect) / aspect))
+  const tangent = Math.tan(degToRad(fov) / 2)
+  const held = aspect >= params.fitAspect ? tangent : (tangent * params.fitAspect) / aspect
+  return radToDeg(2 * Math.atan(framed ? (held * innerHeight) / height : held))
 }
 
 // The lights aim at the statue's box centre in x and z, at their own target height
@@ -1191,6 +1247,11 @@ const paramUniform = (key) =>
   uniform(params[key])
     .setGroup(renderGroup)
     .onFrameUpdate(() => params[key])
+// A param times a lighting layer's weight (LIGHTING_LAYERS)
+const layerUniform = (key, layer) =>
+  uniform(params[key])
+    .setGroup(renderGroup)
+    .onFrameUpdate(() => params[key] * layerWeights[layer])
 const colorUniform = (colorKey, intensityKey = null) =>
   uniform(new THREE.Color())
     .setGroup(renderGroup)
@@ -1208,10 +1269,23 @@ const COAT_F90 = float(1)
 const COAT_CUTOFF = 0.01
 const COAT_GRAZING = 0.3
 
+// The horizon clip of `mode`: 'tabulated' blended back toward three's analytic clip by 1 − `amount`, exactly the
+// table's at 1
+function blendedClip(builder, mode, amount) {
+  const clip = horizonClip(builder, mode)
+  if (mode !== 'tabulated') return clip
+  const analytic = horizonClip(builder, 'analytic')
+  return (l, z) => {
+    const cosine = z.toVar()
+    const tabulated = clip(l, cosine).toVar()
+    return select(amount.greaterThanEqual(1), tabulated, mix(analytic(l, cosine), tabulated, amount))
+  }
+}
+
 // Per lighting pass of the marble's shader: the view-space position, the specular LTC lobe, the dielectric's Fresnel
 // at its lookup while the model blends in a metal, the clear coat's lobe while it has one, and the horizon clip,
 // declared by the first light, before its branch, and read by the lights after it
-function marbleShared(builder, model, clipMode) {
+function marbleShared(builder, model, clipMode, tabulatedAmount) {
   const data = builder.getDataFromNode(builder.lightsNode)
   if (data.marble?.model !== model) {
     // The coat shares the base's normal: the marble sets no clear coat normal
@@ -1226,7 +1300,7 @@ function marbleShared(builder, model, clipMode) {
       coatLobe: model.clearcoat
         ? ltcLobe(builder, { basis, roughness: clearcoatRoughness, f0: COAT_F0, f90: COAT_F90 })
         : null,
-      clip: horizonClip(builder, clipMode),
+      clip: blendedClip(builder, clipMode, tabulatedAmount),
     }
   }
   return data.marble
@@ -1255,6 +1329,7 @@ class MarbleLightingModel extends THREE.PhysicalLightingModel {
   #visibilities
   #energyConservation
   #clipMode
+  #tabulatedAmount
   #bounce
   #metal
   #bounceReflection
@@ -1268,6 +1343,8 @@ class MarbleLightingModel extends THREE.PhysicalLightingModel {
    *   diffuse loses: × (1 − its directional albedo), as three's environment diffuse. The exit term alone. 0 is three's
    *   rect response.
    * @param {'analytic'|'tabulated'} [options.horizonClip='analytic']
+   * @param {Node<float>} [options.tabulatedAmount] - With the tabulated clip, how much of it shows over three's
+   *   analytic one: 1, the default, is the table's alone.
    * @param {boolean} [options.coat=false] - three's clear coat lobe, of the material's clearcoat and
    *   clearcoatRoughness.
    * @param {?Node<vec3>} [options.bounce] - The interreflection's irradiance, added to the indirect diffuse.
@@ -1284,6 +1361,7 @@ class MarbleLightingModel extends THREE.PhysicalLightingModel {
     visibilities = new Map(),
     energyConservation,
     horizonClip: clipMode = 'analytic',
+    tabulatedAmount = float(1),
     coat = false,
     bounce = null,
     metal = null,
@@ -1295,6 +1373,7 @@ class MarbleLightingModel extends THREE.PhysicalLightingModel {
     this.#visibilities = visibilities
     this.#energyConservation = energyConservation
     this.#clipMode = clipMode
+    this.#tabulatedAmount = tabulatedAmount
     this.#bounce = bounce
     this.#metal = metal
     this.#bounceReflection = bounceReflection
@@ -1344,7 +1423,12 @@ class MarbleLightingModel extends THREE.PhysicalLightingModel {
     const thunk = this.#visibilities.get(light) ?? null
     // Read once, in straight-line code: inside the branch its graph would be emitted again
     const visibility = thunk === null ? null : thunk().toVar()
-    const { P, lobe, dielectricFresnel, coatLobe, clip } = marbleShared(builder, this, this.#clipMode)
+    const { P, lobe, dielectricFresnel, coatLobe, clip } = marbleShared(
+      builder,
+      this,
+      this.#clipMode,
+      this.#tabulatedAmount,
+    )
     if (this.#metalOnly.includes(light)) {
       // The metal's specular alone, seen whole: no visibility, diffuse or coat. Skipped where there is no metal, which
       // scales it: on the marble, most of the statue until the gold covers it
@@ -1733,13 +1817,16 @@ class MarbleStatue {
     .onFrameUpdate(() => Math.max(params.veinBodyBlend, 1e-4))
   #cloudAmount = paramUniform('cloudAmount')
   #cloudDetail = paramUniform('cloudDetail')
-  #selfShadowAmount = paramUniform('selfShadowAmount')
-  #energyConservation = paramUniform('marbleEnergyConservation')
+  #selfShadowAmount = layerUniform('selfShadowAmount', 'selfShadow')
+  #energyConservation = layerUniform('marbleEnergyConservation', 'areaLights')
+  #tabulatedAmount = uniform(1)
+    .setGroup(renderGroup)
+    .onFrameUpdate(() => layerWeights.areaLights)
   #coat = uniform(0)
     .setGroup(renderGroup)
     .onFrameUpdate(() => (params.marbleEnabled ? params.marbleCoat : 0))
   #coatRoughness = paramUniform('marbleCoatRoughness')
-  #envOcclusion = paramUniform('selfShadowEnvOcclusion')
+  #envOcclusion = layerUniform('selfShadowEnvOcclusion', 'occlusion')
   #marbleRoughness = paramUniform('marbleRoughness')
   #goldColor = colorUniform('goldColor')
   #goldRoughness = paramUniform('goldRoughness')
@@ -1758,7 +1845,11 @@ class MarbleStatue {
   // normal amplitude
   #rdSlopeAmplitude = uniform(0)
     .setGroup(renderGroup)
-    .onFrameUpdate(() => (params.rdEnabled ? (params.rdDisplacementAmplitude / 1000) * params.rdNormalAmplitude : 0))
+    .onFrameUpdate(() => (params.rdEnabled ? rdDisplacement() * params.rdNormalAmplitude : 0))
+  // How much of the gold shows: the reaction diffusion's layer
+  #goldAmount = uniform(1)
+    .setGroup(renderGroup)
+    .onFrameUpdate(() => layerWeights.reactionDiffusion)
   #veinNoise = new MarbleNoise({ size: params.noiseSize, period: params.noisePeriod })
   // The statue's lights nodes, by the prefixes of the lights listed, joined by '+'
   #lightsNodes = new Map()
@@ -1929,6 +2020,7 @@ class MarbleStatue {
       visibilities,
       energyConservation: this.#energyConservation,
       horizonClip: params.horizonClip,
+      tabulatedAmount: this.#tabulatedAmount,
       coat,
       bounce,
       metal: gold
@@ -1982,16 +2074,16 @@ class MarbleStatue {
   }
 
   // The gold's mask: the smooth pattern ramped from goldEdge − goldEdgeSoftness to goldEdge + goldEdgeSoftness, and
-  // over the output pixel at least: 0 is a crisp antialiased edge, wider a blend, as a colour ramp. Exactly
-  // 0 where the pattern is, so the marble there renders as it does without the gold. And the gold's shading normal and
-  // its roughness filtered by that normal. A footprint is fwidth() × sceneScaleNode: the output pixel's, so the scene's
-  // resolution leaves the filters' widths as they are.
+  // over the output pixel at least: 0 is a crisp antialiased edge, wider a blend, as a colour ramp; × its layer's
+  // weight. Exactly 0 where the pattern is, so the marble there renders as it does without the gold. And the gold's
+  // shading normal and its roughness filtered by that normal. A footprint is fwidth() × sceneScaleNode: the output
+  // pixel's, so the scene's resolution leaves the filters' widths as they are.
   #buildGold() {
     const edge = this.#goldEdge
     const smooth = this.#rd.smoothPatternNode.toVar()
     const w = fwidth(smooth).mul(sceneScaleNode).mul(0.5).add(this.#goldEdgeSoftness).max(1e-4)
     const inside = smoothstep(edge.sub(w), edge.add(w), smooth)
-    const mask = select(this.#rd.patternNode.greaterThan(0), inside, float(0)).toVar()
+    const mask = select(this.#rd.patternNode.greaterThan(0), inside.mul(this.#goldAmount), float(0)).toVar()
     // The shading normal, per pixel: the vertex normal, whose tilt is the relief's slope as simulated, retilted to the
     // gold's profile across its width, p (1 − t)^(p − 1) × the simulated slope at t from the contour (0) to the
     // pattern's top (1), past the fillet
@@ -2145,8 +2237,10 @@ class StudioSweep extends THREE.Mesh {
   #frontEnd = uniform(1)
     .setGroup(renderGroup)
     .onFrameUpdate(() => Math.max(params.floorFrontEnd, params.floorFrontStart + 1e-3))
-  #castShadowAmount = paramUniform('castShadowAmount')
+  #castShadowAmount = layerUniform('castShadowAmount', 'selfShadow')
   #contactOcclusion = paramUniform('contactOcclusionAmount')
+  // As on screen: the environment captures the sweep with the whole of it
+  #contactOcclusionShown = layerUniform('contactOcclusionAmount', 'occlusion')
   // The (x, z) rectangle of the occluder's floor the occlusion texture spans
   #regionMin = uniform(new THREE.Vector2())
   #regionSize = uniform(new THREE.Vector2(1, 1))
@@ -2327,10 +2421,10 @@ class StudioSweep extends THREE.Mesh {
   // Rebuilds the beauty material's graph for the rebuild switches in params
   rebuild() {
     this.#vLight = this.#buildLight(params.horizonClip)
-    const { albedo, V, AO } = this.#terms()
+    const { albedo, V, AO, shownAO } = this.#terms()
     // The shadow's mask holds for the main camera's view alone
     this.radianceNode = this.#radiance(albedo, float(1), AO)
-    this.#beauty.colorNode = this.#radiance(albedo, V, AO)
+    this.#beauty.colorNode = this.#radiance(albedo, V, shownAO)
     this.#beauty.needsUpdate = true
     // The twins without the key's shadow mask, which holds for the sweep's floor alone
     this.#twinMaterial.colorNode = this.radianceNode
@@ -2381,10 +2475,11 @@ class StudioSweep extends THREE.Mesh {
     return material
   }
 
-  // The albedo, the key's visibility V and the contact occlusion AO, for the rebuild switches in params
+  // The albedo, the key's visibility V and the contact occlusion AO, and AO as on screen, by its lighting layer, for the
+  // rebuild switches in params
   #terms() {
     const albedo = this.#backdropColor
-    if (!params.castShadowEnabled) return { albedo, V: float(1), AO: float(1) }
+    if (!params.castShadowEnabled) return { albedo, V: float(1), AO: float(1), shownAO: float(1) }
     const floor = this.#worldToOccluder.mul(vec4(positionWorld, 1)).xz
     const st = floor.sub(this.#regionMin).div(this.#regionSize).toVar()
     // 1 inside the texture's rectangle on the floor, fading out up the cove. Arithmetic, not a select(), which is a
@@ -2395,6 +2490,7 @@ class StudioSweep extends THREE.Mesh {
       albedo,
       V: mix(float(1), keyShadow.shadowMaskNode, this.#castShadowAmount),
       AO: mix(float(1), occlusion, this.#contactOcclusion),
+      shownAO: mix(float(1), occlusion, this.#contactOcclusionShown),
     }
   }
 }
@@ -2714,7 +2810,7 @@ class StudioEnvironment {
       this.current = true
     }
     this.#lit.environment = params.envEnabled ? this.target.texture : null
-    this.#lit.environmentIntensity = params.envIntensity
+    this.#lit.environmentIntensity = params.envIntensity * layerWeights.environment
   }
 
   /**
@@ -3558,8 +3654,8 @@ class StatueInterreflection {
   bounceNode
   /** The bounce irradiance at the vertices drawn, for the vertex stage: the marble packs it in its bakes' varying. */
   bounceVertexNode
-  /** The amplitude the bounce is multiplied by. */
-  amplitudeNode = paramUniform('interreflectionAmplitude')
+  /** The amplitude the bounce is multiplied by, its lighting layer's share. */
+  amplitudeNode = layerUniform('interreflectionAmplitude', 'interreflection')
 
   #statue
   #environment
@@ -3647,10 +3743,11 @@ class StatueInterreflection {
       this.#graph = graph
       radiosity.irradiance = this.#buildIrradiance()
     }
+    // The light the marble shows, its lighting layers' shares
     const lit = params.selfShadowEnabled
-    this.#selfShadowAmount.value = lit ? params.selfShadowAmount : 0
-    this.#envScale.value = params.envEnabled ? params.envIntensity : 0
-    this.#envOcclusion.value = lit ? params.selfShadowEnvOcclusion : 0
+    this.#selfShadowAmount.value = lit ? params.selfShadowAmount * layerWeights.selfShadow : 0
+    this.#envScale.value = params.envEnabled ? params.envIntensity * layerWeights.environment : 0
+    this.#envOcclusion.value = lit ? params.selfShadowEnvOcclusion * layerWeights.occlusion : 0
     this.#placeLights()
     const inputs = [
       // the radiosity's own, so a change in a held frame waits too
@@ -4517,9 +4614,9 @@ class StatuePainter {
     return this.#statue.bvh.raycastFirst(this.#ray, THREE.FrontSide)?.point ?? null
   }
 
-  // Whether the brush paints
+  // Whether the brush paints: not while the breakdown leaves the gold out
   #paints() {
-    return params.rdEnabled && params.rdBrushEnabled
+    return params.rdEnabled && params.rdBrushEnabled && breakdown.shows('reactionDiffusion')
   }
 
   #store({ clientX, clientY, pointerType, buttons, pointerId }) {
@@ -4748,15 +4845,15 @@ class ZoomButtons {
         const p = this.#point.fromArray(view.button).applyMatrix4(this.#statue.matrixWorld).project(camera)
         let x = (p.x + 1) * 0.5 * innerWidth
         let y = (1 - p.y) * 0.5 * innerHeight
-        // Each stays on screen, the × zoomButtonMargin in from its edges, so the way back is always there, and the
-        // others zoomButtonEdgeMargin, past which a narrow window would crop them
+        // Each stays in the framed part of the window, the × zoomButtonMargin in from its edges, so the way back is
+        // always there, and the others zoomButtonEdgeMargin, past which a narrow window would crop them
         const inset = (zoomed ? params.zoomButtonMargin : params.zoomButtonEdgeMargin) + 22
         if (zoomed && p.z > 1) {
           x = innerWidth - x
           y = innerHeight - y
         }
-        x = THREE.MathUtils.clamp(x, inset, innerWidth - inset)
-        y = THREE.MathUtils.clamp(y, inset, innerHeight - inset)
+        x = THREE.MathUtils.clamp(x, inset, innerWidth - framing.right - inset)
+        y = THREE.MathUtils.clamp(y, framing.top + inset, innerHeight - inset)
         shown = zoomed || p.z < 1
         element.style.transform = `translate(${(x - 22).toFixed(1)}px, ${(y - 22).toFixed(1)}px)`
       }
@@ -4838,9 +4935,9 @@ class StatueEraser {
     this.#rd = rd
   }
 
-  /** Starts a disc at `point`, in the simulation's frame. */
+  /** Starts a disc at `point`, in the simulation's frame, unless the breakdown leaves the gold out. */
   erase(point) {
-    if (!params.rdEnabled) return
+    if (!params.rdEnabled || !breakdown.shows('reactionDiffusion')) return
     this.#centre.copy(point).applyMatrix4(this.#rd.matrixWorld)
     this.#t = 0
   }
@@ -5049,6 +5146,231 @@ class HoverParallax {
 
 const parallax = new HoverParallax(camera, controls)
 
+// ─── Lighting breakdown ──────────────────────────────────────────────────────
+
+// The panel that scrubs through LIGHTING_LAYERS: a row per layer, the top one first, over the base, three.js's direct
+// lighting, beside a vertical slider with a stop per row. The slider's level shows the layers up to its stop. Dragging
+// its thumb, or pressing its track, scrubs: the next layer shows in part between two stops, and on release the slider
+// settles on the nearest. A tap on a row moves it to that row's stop; ↑ and ↓ step, Home and End go to either end.
+// Each layer's weight eases to what the slider shows, and to 1 while the panel is hidden; its row and its stop show it.
+// While the panel shows, the view frames the statue beside it or below it, whichever leaves the statue larger.
+class LightingBreakdown {
+  /** The panel's frame, placed by the page's CSS and still while the panel slides in: it measures where it rests. */
+  element
+  // The slider's level: the layers shown, from the bottom
+  #level = LIGHTING_LAYERS.length
+  #shown = false
+  // The slider; the drag's pointer and its position in layers while it drags, else null; the thumb's position as drawn
+  #slider
+  #drag = null
+  #scrub = null
+  #thumb = LIGHTING_LAYERS.length
+  // Each layer's row and stop, the weight they last showed, by key; the self-shadow's detail and the method it names
+  #rows = {}
+  #stops = {}
+  #drawn = {}
+  #selfShadowDetail
+  #selfShadowMethod = null
+  // The framing the panel asks for while it shows, px
+  #reserve = { right: 0, top: 0 }
+
+  constructor() {
+    const element = document.createElement('div')
+    element.className = 'breakdown'
+    element.innerHTML = `
+      <section class="breakdown-panel" aria-label="Lighting breakdown">
+        <header class="breakdown-header">
+          <span class="breakdown-title">Lighting</span>
+          <button type="button" class="breakdown-close" aria-label="Close the lighting breakdown">
+            <svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17" /></svg>
+          </button>
+        </header>
+        <div class="breakdown-body">
+          <div class="breakdown-slider" role="slider" tabindex="0" aria-orientation="vertical"
+            aria-label="Lighting layers shown" aria-valuemin="0" aria-valuemax="${LIGHTING_LAYERS.length}">
+            <span class="breakdown-track"><span class="breakdown-track-fill"></span></span>
+            <span class="breakdown-thumb"></span>
+          </div>
+          <ol class="breakdown-layers"></ol>
+        </div>
+        <p class="breakdown-hint">
+          <span class="breakdown-hint-mouse">Click a layer or ↑ ↓ to move the slider</span>
+          <span class="breakdown-hint-touch">Tap a layer to move the slider</span>
+        </p>
+      </section>`
+    const slider = element.querySelector('.breakdown-slider')
+    const list = element.querySelector('.breakdown-layers')
+    // A layer's row, and its stop on the slider, `index` stops up from the base's
+    const add = (name, detail, index) => {
+      const item = document.createElement('li')
+      item.className = 'breakdown-layer'
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.innerHTML = '<span class="breakdown-name"></span><span class="breakdown-detail"></span>'
+      button.querySelector('.breakdown-name').textContent = name
+      button.querySelector('.breakdown-detail').textContent = detail
+      item.append(button)
+      list.append(item)
+      item.dataset.level = index
+      const stop = document.createElement('span')
+      stop.className = 'breakdown-stop'
+      stop.style.setProperty('--index', index)
+      slider.insertBefore(stop, slider.lastElementChild)
+      return { item, stop }
+    }
+    for (const [index, { key, name, detail }] of [...LIGHTING_LAYERS.entries()].toReversed()) {
+      const { item, stop } = add(name, detail, index + 1)
+      this.#rows[key] = item
+      this.#stops[key] = stop
+    }
+    add('three.js Direct Lighting', 'Key and kicker rect area lights', 0)
+    this.#selfShadowDetail = this.#rows.selfShadow.querySelector('.breakdown-detail')
+    this.#slider = slider
+    this.element = element
+    document.body.append(element)
+
+    element.querySelector('.breakdown-close').addEventListener('click', () => {
+      params.breakdown = false
+      refreshGUI()
+    })
+    list.addEventListener('click', (event) => {
+      const item = event.target.closest('.breakdown-layer')
+      if (item !== null) this.#setLevel(Number(item.dataset.level))
+    })
+    // The slider: a press anywhere on it moves the thumb there and drags it, held so the drag may leave the panel
+    slider.addEventListener('pointerdown', ({ isPrimary, button, pointerId, clientY }) => {
+      if (!isPrimary || button !== 0 || this.#drag !== null) return
+      slider.setPointerCapture(pointerId)
+      slider.classList.add('dragging')
+      this.#drag = pointerId
+      this.#scrub = this.#thumb = this.#position(clientY)
+    })
+    // The drag ends on its pointer's release anywhere, on losing the pointer, or on the window's blur. A release outside
+    // the page, or outside the frame that shows it, never reaches it: the next move, with no button held, ends it then.
+    const release = ({ pointerId }) => {
+      if (this.#drag === null || pointerId !== this.#drag) return
+      this.#drag = null
+      if (slider.hasPointerCapture(pointerId)) slider.releasePointerCapture(pointerId)
+      slider.classList.remove('dragging')
+      this.#setLevel(Math.round(this.#scrub))
+      this.#scrub = null
+    }
+    addEventListener(
+      'pointermove',
+      (event) => {
+        if (this.#drag === null || event.pointerId !== this.#drag) return
+        if (event.buttons === 0) release(event)
+        else this.#scrub = this.#thumb = this.#position(event.clientY)
+      },
+      { capture: true },
+    )
+    addEventListener('pointerup', release, { capture: true })
+    addEventListener('pointercancel', release, { capture: true })
+    slider.addEventListener('lostpointercapture', release)
+    addEventListener('blur', () => release({ pointerId: this.#drag }))
+    // ↑ and ↓ are the page's keys, which step it
+    slider.addEventListener('keydown', (event) => {
+      if (event.code !== 'Home' && event.code !== 'End') return
+      this.#setLevel(event.code === 'End' ? LIGHTING_LAYERS.length : 0)
+      event.preventDefault()
+    })
+    // Where it rests, for the framing: on any change of its size or the window's
+    new ResizeObserver(() => this.#measure()).observe(element)
+    addEventListener('resize', () => this.#measure())
+    this.#setLevel(this.#level)
+    this.show(params.breakdown)
+  }
+
+  /** Whether a layer shows, as the slider sets it: every one while the panel is hidden. */
+  shows(key) {
+    return !this.#shown || LIGHTING_LAYERS.findIndex((layer) => layer.key === key) < this.#level
+  }
+
+  /** Shows or hides the panel: hidden, every layer shows. */
+  show(shown) {
+    this.#shown = shown
+    this.element.classList.toggle('shown', shown)
+    // Out of the tab order while hidden
+    this.element.inert = !shown
+    this.#measure()
+  }
+
+  /** Whether the panel sits left of the GUI, which takes the window's top right in debug. */
+  set besideGUI(value) {
+    this.element.classList.toggle('beside-gui', value)
+    this.#measure()
+  }
+
+  /** The slider a stop up or down. */
+  step(delta) {
+    this.#setLevel(THREE.MathUtils.clamp(this.#level + delta, 0, LIGHTING_LAYERS.length))
+  }
+
+  /** Per frame, before sync(): the layers' weights, the thumb and the framing, eased toward what the panel shows. */
+  update(dt) {
+    const ease = 1 - Math.exp(-dt * params.breakdownEase)
+    const approach = (value, target, epsilon) => {
+      const eased = value + (target - value) * ease
+      return Math.abs(target - eased) < epsilon ? target : eased
+    }
+    // The layers up to the slider's level, or its drag's, the next in part
+    const level = this.#scrub ?? this.#level
+    for (const [index, { key }] of LIGHTING_LAYERS.entries()) {
+      const target = this.#shown ? THREE.MathUtils.clamp(level - index, 0, 1) : 1
+      // Exactly its target once near it: the bounce recomputes while the weights it reads change
+      layerWeights[key] = approach(layerWeights[key], target, 1e-3)
+      if (this.#drawn[key] !== layerWeights[key]) {
+        this.#drawn[key] = layerWeights[key]
+        const weight = layerWeights[key].toFixed(3)
+        this.#rows[key].style.setProperty('--weight', weight)
+        this.#stops[key].style.setProperty('--weight', weight)
+      }
+    }
+    // The thumb follows a drag, and eases to the level otherwise
+    if (this.#drag === null) this.#thumb = approach(this.#thumb, this.#level, 1e-3)
+    if (this.#drawn.thumb !== this.#thumb) {
+      this.#drawn.thumb = this.#thumb
+      this.#slider.style.setProperty('--level', this.#thumb.toFixed(3))
+    }
+    framing.right = approach(framing.right, this.#shown ? this.#reserve.right : 0, 0.5)
+    framing.top = approach(framing.top, this.#shown ? this.#reserve.top : 0, 0.5)
+    if (this.#selfShadowMethod !== params.selfShadowMethod) {
+      this.#selfShadowMethod = params.selfShadowMethod
+      this.#selfShadowDetail.textContent =
+        params.selfShadowMethod === TRANSFER_METHOD ? 'Radiance transfer, floor shadow' : 'Visibility masks, floor shadow'
+    }
+  }
+
+  // The slider's position in layers at a client y: k at the kth layer's stop, 0 at the base's, between stops in part.
+  // Its stops sit at its rows' centres, which are all one height.
+  #position(y) {
+    const rect = this.#slider.getBoundingClientRect()
+    const row = rect.height / (LIGHTING_LAYERS.length + 1)
+    return THREE.MathUtils.clamp((rect.bottom - row / 2 - y) / row, 0, LIGHTING_LAYERS.length)
+  }
+
+  // The slider at `level`, a stop: the layers below it shown, the rest left out
+  #setLevel(level) {
+    this.#level = level
+    this.#slider.setAttribute('aria-valuenow', level)
+    const top = level === 0 ? 'three.js Direct Lighting' : LIGHTING_LAYERS[level - 1].name
+    this.#slider.setAttribute('aria-valuetext', top)
+  }
+
+  // The framing that leaves the statue the larger, beside the panel or below it: the statue's height on screen goes
+  // with the framed part's height, or its width over fitAspect where that is narrower, as fittedFov() frames it
+  #measure() {
+    const rect = this.element.getBoundingClientRect()
+    const right = Math.max(innerWidth - rect.left, 0)
+    const top = Math.max(rect.bottom, 0)
+    const beside = Math.min(innerHeight, (innerWidth - right) / params.fitAspect)
+    const below = Math.min(innerHeight - top, innerWidth / params.fitAspect)
+    this.#reserve = beside >= below ? { right, top: 0 } : { right: 0, top }
+  }
+}
+
+const breakdown = new LightingBreakdown()
+
 // ─── GUI ─────────────────────────────────────────────────────────────────────
 
 // The simulation's params and the lights' intensities, read every frame; Enabled rebuilds the statue's material
@@ -5064,6 +5386,7 @@ function refreshGUI() {
 }
 
 gui.add(params, 'debug').name('Debug (P)')
+gui.add(params, 'breakdown').name('Lighting Breakdown (B)')
 gui.add({ logCamera }, 'logCamera').name('Log Camera (O)')
 
 // The scene's pixels per CSS pixel, which TAAU upscales to the output's
@@ -5204,10 +5527,14 @@ addEventListener(
     if (e.target.matches?.('input[type=text], input[type=number], textarea')) return
     if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return
     if (e.code === 'KeyP') params.debug = !params.debug
+    else if (e.code === 'KeyB') params.breakdown = !params.breakdown
     else if (e.code === 'KeyR') growth.restart()
     else if (e.code === 'Escape') zoomButtons.zoomOut()
     else if (e.code === 'KeyO' && params.debug) logCamera()
-    else return
+    else if ((e.code === 'ArrowUp' || e.code === 'ArrowDown') && params.breakdown) {
+      breakdown.step(e.code === 'ArrowUp' ? 1 : -1)
+      e.preventDefault()
+    } else return
     refreshGUI()
   },
   { capture: true },
@@ -5285,6 +5612,9 @@ function sync() {
     camera.fov = fov
     camera.updateProjectionMatrix()
   }
+  // The lens shift of the breakdown's framing
+  if (changed('framing', `${framing.right}|${framing.top}`)) camera.updateProjectionMatrix()
+  if (changed('breakdown', params.breakdown)) breakdown.show(params.breakdown)
   renderer.toneMapping = debugging || !params.toneMappingEnabled ? THREE.NoToneMapping : THREE.NeutralToneMapping
   renderer.toneMappingExposure = params.exposure
   scene.background.set(params.backgroundColor)
@@ -5299,6 +5629,7 @@ function sync() {
   if (changed('debug', params.debug)) {
     stats.dom.style.display = params.debug ? '' : 'none'
     gui.show(params.debug)
+    breakdown.besideGUI = params.debug
   }
   // GPU timestamps while the stats show: every frame that writes them reads them back. Set on a change only.
   if (changed('timestamps', canTimestamp && params.debug)) {
@@ -5328,7 +5659,7 @@ function sync() {
   rd.patternLow = params.rdPatternLow
   rd.patternHigh = params.rdPatternHigh
   rd.blurIterations = params.rdBlurIterations
-  rd.displacementAmplitude = params.rdEnabled ? params.rdDisplacementAmplitude / 1000 : 0
+  rd.displacementAmplitude = params.rdEnabled ? rdDisplacement() : 0
   rd.normalScale = params.rdNormalAmplitude
   rd.brushRadius = params.rdBrushRadius / 1000
   rd.brushMode = params.rdBrushMode
@@ -5446,6 +5777,8 @@ renderer.setAnimationLoop((timestamp) => {
   timer.update(timestamp)
   const dt = Math.min(timer.getDelta(), 1 / 15)
   parallax.remove()
+  // The lighting layers' weights and the framing, which sync() and the frame's updates read
+  breakdown.update(dt)
   sync()
   controls.update(dt)
   zoomButtons.update(dt)

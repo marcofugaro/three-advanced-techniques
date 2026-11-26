@@ -132,6 +132,257 @@
           animation: none;
         }
       }
+
+      /* The lighting breakdown: the zoom buttons' frosted glass, a row per lighting layer, the top one first, over
+         three.js's direct lighting, beside a vertical slider with a stop at each row's centre, filled by its layer's
+         weight. The rows are all --row high, which the slider's stops and thumb are placed by. Its frame rests where
+         the view frames the statue beside it: on the right, middle high, or left of the GUI in debug. */
+      .breakdown {
+        position: fixed;
+        z-index: 11;
+        top: 50%;
+        right: 16px;
+        transform: translateY(-50%);
+        pointer-events: none;
+      }
+      .breakdown.beside-gui {
+        right: 276px;
+      }
+      .breakdown-panel {
+        --ease: cubic-bezier(0.22, 1, 0.36, 1);
+        --ink: #33434b;
+        --row: 44px;
+        width: 252px;
+        padding: 8px 6px 10px;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.22);
+        backdrop-filter: blur(20px) saturate(180%) brightness(1.06);
+        -webkit-backdrop-filter: blur(20px) saturate(180%) brightness(1.06);
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 0.55),
+          inset 0 1px 0 rgba(255, 255, 255, 0.4),
+          0 6px 20px rgba(20, 28, 40, 0.12),
+          0 1px 2px rgba(20, 28, 40, 0.1);
+        color: var(--ink);
+        font: 13px/1.25 system-ui, sans-serif;
+        opacity: 0;
+        transform: translateX(16px);
+        transition:
+          opacity 0.5s var(--ease),
+          transform 0.5s var(--ease);
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .breakdown.shown .breakdown-panel {
+        opacity: 1;
+        transform: none;
+        pointer-events: auto;
+      }
+      .breakdown-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 0 4px 12px;
+      }
+      .breakdown-title {
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.7;
+      }
+      .breakdown-close {
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background: none;
+        color: inherit;
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+      .breakdown-close svg {
+        width: 14px;
+        height: 14px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+      }
+      .breakdown-body {
+        display: grid;
+        grid-template-columns: 36px minmax(0, 1fr);
+      }
+      /* The slider: its track from the base's stop to the top layer's, filled up to the thumb at --level */
+      .breakdown-slider {
+        position: relative;
+        border-radius: 18px;
+        cursor: pointer;
+        touch-action: none;
+        outline: none;
+      }
+      .breakdown-track,
+      .breakdown-track-fill,
+      .breakdown-stop,
+      .breakdown-thumb {
+        position: absolute;
+        left: 50%;
+      }
+      .breakdown-track {
+        top: calc(var(--row) / 2);
+        bottom: calc(var(--row) / 2);
+        width: 4px;
+        margin-left: -2px;
+        border-radius: 2px;
+        background: rgba(51, 67, 75, 0.16);
+      }
+      .breakdown-track-fill {
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: calc(var(--row) * var(--level, 0));
+        border-radius: 2px;
+        background: var(--ink);
+      }
+      /* A stop: a ring, filled by its layer's weight */
+      .breakdown-stop {
+        bottom: calc(var(--row) * (var(--index) + 0.5) - 5px);
+        width: 10px;
+        height: 10px;
+        margin-left: -5px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.9);
+        box-shadow: inset 0 0 0 2px var(--ink);
+      }
+      .breakdown-stop::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        background: var(--ink);
+        transform: scale(var(--weight, 1));
+      }
+      .breakdown-thumb {
+        bottom: calc(var(--row) * (var(--level, 0) + 0.5) - 11px);
+        width: 22px;
+        height: 22px;
+        margin-left: -11px;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow:
+          inset 0 0 0 1px rgba(51, 67, 75, 0.12),
+          0 2px 6px rgba(20, 28, 40, 0.28),
+          0 0 0 0 rgba(255, 255, 255, 0.5);
+        cursor: grab;
+        transition:
+          transform 0.2s var(--ease),
+          box-shadow 0.2s var(--ease);
+      }
+      .breakdown-slider.dragging,
+      .breakdown-slider.dragging .breakdown-thumb {
+        cursor: grabbing;
+      }
+      .breakdown-slider.dragging .breakdown-thumb {
+        transform: scale(1.15);
+      }
+      .breakdown-slider:focus-visible .breakdown-thumb {
+        box-shadow:
+          inset 0 0 0 1px rgba(51, 67, 75, 0.12),
+          0 2px 6px rgba(20, 28, 40, 0.28),
+          0 0 0 4px rgba(255, 255, 255, 0.7);
+      }
+      .breakdown-layers {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .breakdown-layer button {
+        display: grid;
+        align-content: center;
+        width: 100%;
+        height: var(--row);
+        padding: 0 8px;
+        border: none;
+        border-radius: 12px;
+        background: none;
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+        touch-action: manipulation;
+        opacity: calc(0.42 + 0.58 * var(--weight, 1));
+      }
+      .breakdown-name,
+      .breakdown-detail {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .breakdown-name {
+        font-weight: 500;
+      }
+      .breakdown-detail {
+        font-size: 11px;
+        opacity: 0.7;
+      }
+      .breakdown-hint {
+        margin: 6px 0 0;
+        padding: 0 12px;
+        font-size: 11px;
+        opacity: 0.6;
+      }
+      .breakdown-hint-touch {
+        display: none;
+      }
+      @media (pointer: coarse) {
+        .breakdown-hint-mouse {
+          display: none;
+        }
+        .breakdown-hint-touch {
+          display: inline;
+        }
+      }
+      .breakdown button:focus-visible {
+        outline: 2px solid rgba(255, 255, 255, 0.9);
+        outline-offset: -2px;
+      }
+      @media (hover: hover) {
+        .breakdown-layer button:hover,
+        .breakdown-close:hover {
+          background: rgba(255, 255, 255, 0.28);
+        }
+      }
+      /* Compact where the window is short, or narrower than the statue's framing (the params' fitAspect, 0.7): at the
+         top right on a phone held upright, the statue framed below it */
+      @media (max-height: 560px), (max-aspect-ratio: 7/10) {
+        .breakdown-panel {
+          --row: 32px;
+          width: auto;
+          padding: 6px 4px 8px;
+          border-radius: 16px;
+          font-size: 12.5px;
+        }
+        .breakdown-detail {
+          display: none;
+        }
+      }
+      @media (max-aspect-ratio: 7/10) {
+        .breakdown {
+          top: 12px;
+          right: 12px;
+          transform: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .breakdown-panel,
+        .breakdown-thumb {
+          transition: none;
+        }
+      }
     </style>
     <script type="importmap">
       {
