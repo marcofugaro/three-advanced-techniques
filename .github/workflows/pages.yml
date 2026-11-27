@@ -31,17 +31,12 @@ jobs:
           cache: npm
       # No install scripts: puppeteer's downloads a browser the docs don't need
       - run: npm ci --ignore-scripts
-      - run: npm run docs -- --repo-root=./
-      - name: Assemble the site
-        run: |
-          mkdir _site
-          git ls-files -z ':!website' | tar --null -T - -cf - | tar -xf - -C _site
-          clashes=$(comm -12 <(cd website && find . -type f | sort) <(cd _site && find . -type f | sort))
-          if [ -n "$clashes" ]; then echo "::error::website/ would overwrite repo files: $clashes"; exit 1; fi
-          cp -R website/. _site/
+      - run: npm run docs
+      # The website moves to the root, over the rest of the repo; the upload leaves out .git and hidden files
+      - run: cp -R website/. . && rm -rf website node_modules
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: _site
+          path: .
       - id: deployment
         uses: actions/deploy-pages@v5
