@@ -2,9 +2,9 @@
 
 Image-based lighting that keeps up with a changing scene. For the specular, `SlicedPMREMGenerator` regenerates a scene's PMREM a few cube faces or mip levels a frame. For the diffuse, `IrradianceProbeColumn` captures order-2 spherical-harmonic probes at a few heights on a vertical axis, projects them on the GPU and blends them by height. After Ramamoorthi and Hanrahan, [_An Efficient Representation for Irradiance Environment Maps_](https://graphics.stanford.edu/papers/envmap/) (2001), Sloan, [_Stupid Spherical Harmonics (SH) Tricks_](https://www.ppsloan.org/publications/StupidSH36.pdf) (2008), and Driscoll, [_Cubemap Texel Solid Angle_](https://www.rorydriscoll.com/2012/01/15/cubemap-texel-solid-angle/) (2012).
 
-<a href="https://marcofugaro.github.io/three-advanced-techniques/rendering/environment-lighting/"><img src="index.webp" alt="Environment lighting demo" width="600"></a>
+<a href="https://three-advanced-techniques.com/rendering/environment-lighting/"><img src="index.webp" alt="Environment lighting demo" width="600"></a>
 
-#### Live link: https://marcofugaro.github.io/three-advanced-techniques/rendering/environment-lighting/
+#### Live link: https://three-advanced-techniques.com/rendering/environment-lighting/
 
 ## Usage
 

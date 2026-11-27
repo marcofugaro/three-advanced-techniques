@@ -75,7 +75,6 @@ const _box = new THREE.Box3()
 
 // An open hand over what a drag would grab, closed through the drag.
 export const HAND = Object.freeze({ hover: 'grab', drag: 'grabbing' })
-const RENDER_PIXEL_RATIOS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
 const MAX_PIXEL_RATIO = 2 // the output's pixels per CSS pixel at most
 const VIEW = {
   shadows: true,
@@ -86,8 +85,7 @@ const VIEW = {
   ao: true,
   aoIntensity: 1,
   aoRadius: 0.1, // m at a scale of 1
-  // Resolution, as worm-monster's desktop tier: the scene's pixels per CSS pixel, one of RENDER_PIXEL_RATIOS, which TAAU
-  // upscales to the output's; the occlusion runs at half the scene's
+  // The scene's pixels per CSS pixel, which TAAU upscales to the output's; the occlusion runs at half the scene's
   renderPixelRatio: 1,
 }
 
@@ -500,11 +498,6 @@ export class Lab {
       .add(this.view, 'aoRadius', 0.01 * scale, 0.3 * scale, 0.005 * scale)
       .name('occlusion radius (m)')
       .onChange((value) => (this.occlusion.radius = value))
-    const resolution = this.gui.addFolder('Resolution').close()
-    resolution
-      .add(this.view, 'renderPixelRatio', RENDER_PIXEL_RATIOS)
-      .name('render pixel ratio')
-      .onChange(() => this.#setSampling())
   }
 
   // Back far enough to see the bench's width, at most 3.6 m × scale (a portrait phone sees the middle).

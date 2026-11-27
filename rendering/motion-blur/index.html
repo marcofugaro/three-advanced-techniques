@@ -55,11 +55,9 @@
         finish: 'ceramic',
         exposure: 0.62,
         fov: 32,
-        // Resolution, as worm-monster's desktop tier: the scene's pixels per CSS pixel, one of RENDER_PIXEL_RATIOS,
-        // which TAAU upscales to the output's
+        // The scene's pixels per CSS pixel, which TAAU upscales to the output's
         renderPixelRatio: 1,
       }
-      const RENDER_PIXEL_RATIOS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
       const MAX_PIXEL_RATIO = 2 // the output's pixels per CSS pixel at most
 
       const renderer = new THREE.WebGPURenderer({ antialias: false }) // TAAU anti-aliases
@@ -234,23 +232,12 @@
       const rotor = pinwheel.getObjectByName('rotor') // turns about its +z, out of its face
       scene.add(pinwheel)
 
-      // The sheet's two sides, matte paint under a satin coat; the GUI's Pinwheel Material folder sets them.
-      const sheet = { front: '#f2b400', back: '#ee4b16', roughness: 0.6, specular: 1, clearcoat: 1, clearcoatRoughness: 0.4 } // yellow in the cups, orange-red on the curls
+      // The sheet's two sides, matte paint under a satin coat: yellow in the cups, orange-red on the curls
+      const SHEET = { roughness: 0.6, specularIntensity: 1, clearcoat: 1, clearcoatRoughness: 0.4 }
       const sides = {
-        'pinwheel-front': new THREE.MeshPhysicalNodeMaterial({ name: 'pinwheel-front' }),
-        'pinwheel-back': new THREE.MeshPhysicalNodeMaterial({ name: 'pinwheel-back' }),
+        'pinwheel-front': new THREE.MeshPhysicalNodeMaterial({ name: 'pinwheel-front', color: '#f2b400', ...SHEET }),
+        'pinwheel-back': new THREE.MeshPhysicalNodeMaterial({ name: 'pinwheel-back', color: '#ee4b16', ...SHEET }),
       }
-      function setSheet() {
-        for (const [name, material] of Object.entries(sides)) {
-          material.color.set(name === 'pinwheel-front' ? sheet.front : sheet.back)
-          material.roughness = sheet.roughness
-          material.specularIntensity = sheet.specular
-          material.clearcoatRoughness = sheet.clearcoatRoughness
-          if (material.clearcoat > 0 !== sheet.clearcoat > 0) material.needsUpdate = true // the coat's shader comes and goes
-          material.clearcoat = sheet.clearcoat
-        }
-      }
-      setSheet()
       pinwheel.traverse((child) => {
         if (child.isMesh && sides[child.material.name]) child.material = sides[child.material.name]
       })
@@ -335,35 +322,6 @@
       motion.add(params, 'wheel', 0, 12, 0.1).name('wheel (turns/s)')
       motion.add(params, 'pinwheel', 0, 6, 0.01).name('pinwheel (turns/s)')
       motion.add(params, 'finish', Object.keys(FINISHES)).name('runner finish').onChange(setFinish)
-      const sheetFolder = gui.addFolder('Pinwheel Material')
-      sheetFolder.addColor(sheet, 'front').onChange(setSheet)
-      sheetFolder.addColor(sheet, 'back').onChange(setSheet)
-      sheetFolder.add(sheet, 'roughness', 0, 1, 0.01).onChange(setSheet)
-      sheetFolder.add(sheet, 'specular', 0, 1, 0.01).onChange(setSheet)
-      sheetFolder.add(sheet, 'clearcoat', 0, 1, 0.01).onChange(setSheet)
-      sheetFolder.add(sheet, 'clearcoatRoughness', 0, 1, 0.01).name('clearcoat roughness').onChange(setSheet)
-      const look = gui.addFolder('Camera')
-      look.add(params, 'fov', 15, 70, 1).onChange((value) => {
-        camera.fov = value
-        camera.updateProjectionMatrix()
-      })
-      look.add(params, 'exposure', 0.2, 3, 0.01).onChange((value) => (renderer.toneMappingExposure = value))
-      // Logs the current view as code for the camera's start, and copies it.
-      const view = {
-        log() {
-          const xyz = (vector) => vector.toArray().map((value) => +value.toFixed(3)).join(', ')
-          const code = [
-            `camera.position.set(${xyz(camera.position)})`,
-            `controls.target.set(${xyz(controls.target)})`,
-            `fov: ${camera.fov}`,
-          ].join('\n')
-          console.log(code)
-          navigator.clipboard?.writeText(code).catch(() => {})
-        },
-      }
-      look.add(view, 'log').name('log view')
-      const resolution = gui.addFolder('Resolution')
-      resolution.add(params, 'renderPixelRatio', RENDER_PIXEL_RATIOS).name('render pixel ratio').onChange(setSampling)
 
       // ---- Loop ----
 

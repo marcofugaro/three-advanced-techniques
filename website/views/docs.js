@@ -336,7 +336,7 @@ function linkCodes(html, ctx, self = null) {
       i % 2 === 1
         ? part
         : part.replace(/(three(?:&#39;|’)s )?<code>([A-Za-z_$][\w$]*)(\(\))?<\/code>/g, (match, three, name, call) => {
-            // three's bloom() is three's own, not this package's
+            // a name after "three's" is three's own, not this package's
             const url = !three && typeHref(name, ctx)
             return url && url !== (self && href(self)) ? `<a class="code-link" href="${url}"><code>${name}${call ?? ''}</code></a>` : match
           }),

@@ -2,9 +2,9 @@
 
 Compute shader reaction-diffusion in TSL. `ReactionDiffusionSimulation2D` grows Gray-Scott patterns over the surface of any triangle mesh and draws that mesh raised where the pattern grows, with any material. After Turk, [_Generating Textures on Arbitrary Surfaces Using Reaction-Diffusion_](https://doi.org/10.1145/127719.122749) (1991), Pearson, [_Complex Patterns in a Simple System_](https://arxiv.org/abs/patt-sol/9304003) (1993), and Sims, [_Reaction-Diffusion Tutorial_](https://www.karlsims.com/rd.html).
 
-<a href="https://marcofugaro.github.io/three-advanced-techniques/simulations/reaction-diffusion/"><img src="index.webp" alt="Reaction Diffusion demo" width="600"></a>
+<a href="https://three-advanced-techniques.com/simulations/reaction-diffusion/"><img src="index.webp" alt="Reaction Diffusion demo" width="600"></a>
 
-#### Live link: https://marcofugaro.github.io/three-advanced-techniques/simulations/reaction-diffusion/
+#### Live link: https://three-advanced-techniques.com/simulations/reaction-diffusion/
 
 ## Usage
 

@@ -5387,11 +5387,6 @@ function refreshGUI() {
 
 gui.add(params, 'debug').name('Debug (P)')
 gui.add(params, 'breakdown').name('Lighting Breakdown (B)')
-gui.add({ logCamera }, 'logCamera').name('Log Camera (O)')
-
-// The scene's pixels per CSS pixel, which TAAU upscales to the output's
-const resolutionFolder = gui.addFolder('Resolution')
-resolutionFolder.add(params, 'renderPixelRatio', RENDER_PIXEL_RATIOS).name('Render Pixel Ratio')
 
 // The bakes into a file for the page to read beside it, and whether it reads one (reload)
 const bakeFolder = gui.addFolder('Bake')

@@ -157,11 +157,9 @@
       const params = {
         bloom: true,
         speed: 1,
-        // Resolution, as worm-monster's desktop tier: the scene's pixels per CSS pixel, one of RENDER_PIXEL_RATIOS,
-        // which TAAU upscales to the output's
+        // The scene's pixels per CSS pixel, which TAAU upscales to the output's
         renderPixelRatio: 1,
       }
-      const RENDER_PIXEL_RATIOS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
       const MAX_PIXEL_RATIO = 2 // the output's pixels per CSS pixel at most
 
       const renderer = new THREE.WebGPURenderer({ antialias: false })
@@ -534,8 +532,6 @@
       gui.add(bloomNode.threshold, 'value', 0, 2.5, 0.01).name('threshold')
       gui.add(neonGain, 'value', 0, 2, 0.01).name('neon strength')
       gui.add(params, 'speed', 0, 3, 0.01)
-      const resolution = gui.addFolder('Resolution')
-      resolution.add(params, 'renderPixelRatio', RENDER_PIXEL_RATIOS).name('render pixel ratio').onChange(setSampling)
 
       const timer = new THREE.Timer()
       timer.connect(document)

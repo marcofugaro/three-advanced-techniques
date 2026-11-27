@@ -96,11 +96,9 @@
         finish: 'armour',
         bounce: 0.45, // the room's own share of the environment: its walls light each other through it
         exposure: 1,
-        // Resolution, as worm-monster's desktop tier: the scene's pixels per CSS pixel, one of RENDER_PIXEL_RATIOS,
-        // which TAAU upscales to the output's
+        // The scene's pixels per CSS pixel, which TAAU upscales to the output's
         renderPixelRatio: 1,
       }
-      const RENDER_PIXEL_RATIOS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
       const MAX_PIXEL_RATIO = 2 // the output's pixels per CSS pixel at most
 
       const renderer = new THREE.WebGPURenderer({ antialias: false }) // TAAU anti-aliases
@@ -367,7 +365,11 @@
         geometry.setAttribute('neon', new THREE.Float32BufferAttribute(new Float32Array(geometry.attributes.position.count).fill(index), 1))
         neonParts.push(geometry)
         const length = geometry.parameters.path?.getLength() ?? 2 * Math.PI * geometry.parameters.radius
-        neons.push({ slot, length, gain, colour: new THREE.Color(), level: 1 })
+        // when a palette change reaches it, 0 … 1 round the turntable's axis
+        geometry.computeBoundingBox()
+        const { x, z } = geometry.boundingBox.getCenter(new THREE.Vector3())
+        const sweep = Math.atan2(x, z) / (2 * Math.PI) + 0.5
+        neons.push({ slot, length, gain, sweep, colour: new THREE.Color(), level: 1 })
         spill?.members.push(index)
         return index
       }
@@ -520,9 +522,10 @@
         }
       }
 
-      // The cycle: the neons change palette every 8 beats, dipping out and back in round the change; a flash chases
-      // round the columns; the equaliser's level swings; and every 40 s the garage door rolls up on the sun for a while.
-      // Each change takes a few environment refreshes, so the figure keeps up with it.
+      // The cycle: the neons take the next palette every 12 beats, the change sweeping round the garage, each tube turning
+      // through the hues between; a flash chases round the columns; the equaliser's level swings; and every 40 s the
+      // garage door rolls up on the sun for a while. Each change takes a few environment refreshes, so the figure keeps
+      // up with it.
       const PALETTES = [
         ['#ff2bd6', '#19e3ff', '#8f3dff', '#ffd23f'],
         ['#ff3355', '#ff9a1f', '#ff2bd6', '#fff0d0'],
@@ -530,14 +533,28 @@
         ['#36ff9a', '#ff2bd6', '#19e3ff', '#ffb000'],
       ].map((palette) => palette.map((hex) => new THREE.Color(hex)))
       const BEAT = 60 / 124 // s
+      // beats: a palette's span, the change's travel round the garage, and each tube's turn
+      const CHANGE = { every: 12, sweep: 4, fade: 2 }
+      const hslFrom = {}
+      const hslTo = {}
+      // From a to b by t, the nearer way round the hue circle
+      function lerpHue(target, a, b, t) {
+        a.getHSL(hslFrom)
+        b.getHSL(hslTo)
+        const hue = hslTo.h - hslFrom.h
+        const lerp = THREE.MathUtils.lerp
+        return target.setHSL(hslFrom.h + (hue - Math.round(hue)) * t, lerp(hslFrom.s, hslTo.s, t), lerp(hslFrom.l, hslTo.l, t))
+      }
       function cycle(t) {
-        const beats = t / BEAT + 2 // starting mid-palette
-        const into = beats % 8
-        const palette = PALETTES[Math.floor(beats / 8) % PALETTES.length]
-        const dip = THREE.MathUtils.smoothstep(into, 0, 1) * (1 - THREE.MathUtils.smoothstep(into, 7, 8))
+        const beats = t / BEAT + 6 // the first change 6 beats in
+        const count = Math.floor(beats / CHANGE.every)
+        const into = beats - count * CHANGE.every
+        const from = PALETTES[(count + PALETTES.length - 1) % PALETTES.length]
+        const to = PALETTES[count % PALETTES.length]
         for (const neon of neons) {
-          neon.colour.copy(palette[neon.slot])
-          neon.level = dip
+          const blend = THREE.MathUtils.smoothstep(into - neon.sweep * CHANGE.sweep, 0, CHANGE.fade)
+          lerpHue(neon.colour, from[neon.slot], to[neon.slot], blend)
+          neon.level = 1
         }
         const height = 2.5 + 2.5 * Math.sin(beats * 0.9) * Math.sin(beats * 0.37 + 1)
         bars.forEach((index, i) => (neons[index].level *= THREE.MathUtils.clamp(height - Math.abs(i - 2) * 1.2, 0.05, 1)))
@@ -836,6 +853,7 @@
       gui.add(params, 'probes', 1, 5, 1).name('probe count').onFinishChange(setProbes)
       gui.add(params, 'showProbes').name('show probes').onChange((value) => (probesHelper.visible = value))
       gui.add(params, 'refresh', Object.keys(refreshes)).onChange(cancelRefresh)
+      gui.add(params, 'framesPerRefresh').name('frames per refresh').disable().listen()
       gui.add(params, 'facesPerSlice', 1, 6, 1).name('faces per slice')
       gui.add(params, 'levelsPerSlice', 1, 6, 1).name('levels per slice')
       gui
@@ -844,23 +862,6 @@
           generator.samples = value || null
           cancelRefresh()
         })
-      gui.add(params, 'framesPerRefresh').name('frames per refresh').disable().listen()
-      gui.add(camera, 'fov', 20, 90, 1).onChange(() => camera.updateProjectionMatrix())
-      // Logs the current view as code for the page's start, the turntable's turn with it, and copies it
-      const view = {
-        log() {
-          const xyz = (vector) => vector.toArray().map((value) => +value.toFixed(3)).join(', ')
-          const code = [
-            `camera.position.set(${xyz(camera.position)})`,
-            `controls.target.set(${xyz(controls.target)})`,
-            `turntable.rotation.y = ${+THREE.MathUtils.euclideanModulo(turntable.rotation.y, Math.PI * 2).toFixed(3)}`,
-            `fov: ${camera.fov}`,
-          ].join('\n')
-          console.log(code)
-          navigator.clipboard?.writeText(code).catch(() => {})
-        },
-      }
-      gui.add(view, 'log').name('log view')
       const lightsFolder = gui.addFolder('Lights')
       lightsFolder.add(params, 'animate').name('cycle')
       lightsFolder.add(params, 'door', 0, 1, 0.01).name('garage door').listen()
@@ -873,8 +874,6 @@
         .name('room bounce')
         .onChange((value) => roomMaterials.forEach((material) => (material.envMapIntensity = value)))
       sceneFolder.add(params, 'exposure', 0.2, 3, 0.01).onChange((value) => (renderer.toneMappingExposure = value))
-      const resolutionFolder = gui.addFolder('Resolution')
-      resolutionFolder.add(params, 'renderPixelRatio', RENDER_PIXEL_RATIOS).name('render pixel ratio').onChange(setSampling)
 
       // ---- Loop ----
 

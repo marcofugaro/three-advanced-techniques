@@ -43,7 +43,7 @@ export const EXAMPLE_CATEGORIES = [
         screenshot: 'rendering/ambient-occlusion/index.webp',
         technique: 'ambient-occlusion',
         description:
-          "XeGTAO's ground-truth ambient occlusion at half resolution, denoised and accumulated over frames, on a field of stepped hexagonal prisms.",
+          "XeGTAO's ground-truth ambient occlusion made cheap: half resolution, 2 directions a pixel, and the denoise and frame blending in one pass.",
       },
       {
         id: 'area-light',
@@ -60,7 +60,7 @@ export const EXAMPLE_CATEGORIES = [
         page: 'rendering/bloom/index.html',
         screenshot: 'rendering/bloom/index.webp',
         technique: 'bloom',
-        description: "The Unreal Bloom's mip-chain glow in 8 passes instead of 12, on neon sweeping through a vaulted hall.",
+        description: "The Unreal Bloom's mip-chain glow in 8 passes instead of 12.",
       },
       {
         id: 'environment-lighting',
@@ -69,7 +69,7 @@ export const EXAMPLE_CATEGORIES = [
         screenshot: 'rendering/environment-lighting/index.webp',
         technique: 'environment-lighting',
         description:
-          'Image-based lighting that keeps up with a changing underground garage, its reflections regenerated a few cube faces a frame.',
+          'Image-based lighting that keeps up with a changing environment, its reflections re-rendered a little each frame so they update without stutter.',
       },
       {
         id: 'motion-blur',
@@ -78,7 +78,7 @@ export const EXAMPLE_CATEGORIES = [
         screenshot: 'rendering/motion-blur/index.webp',
         technique: 'motion-blur',
         description:
-          'Object and camera motion blur as a tile-based reconstruction filter, on a sprinting runner, a spinning wheel and a big pinwheel.',
+          "Object and camera motion blur with smooth streaks that reach past a moving object's outline, with no stepped copies and no smearing between near and far objects.",
       },
       {
         id: 'precomputed-lighting',
@@ -87,7 +87,7 @@ export const EXAMPLE_CATEGORIES = [
         screenshot: 'rendering/precomputed-lighting/index.webp',
         technique: 'precomputed-lighting',
         description:
-          'Self-shadows, bounce light and contact shadows baked once for a plaster dragon and shaded live as its turntable turns.',
+          'Self-shadows, bounce light and contact shadows baked once and shaded live as the lights or subject move in any direction.',
       },
       {
         id: 'screen-space-reflections',
@@ -105,7 +105,7 @@ export const EXAMPLE_CATEGORIES = [
         screenshot: 'rendering/taau/index.webp',
         technique: 'taau',
         description:
-          'Temporal anti-aliasing upscaling that keeps wires thinner than a pixel steady and edges smooth, on a pendulum wave and a chrome sphere.',
+          'Temporal anti-aliasing upscaling that allows to render at a lower resolution with comparable results to native MSAA.',
       },
     ],
   },

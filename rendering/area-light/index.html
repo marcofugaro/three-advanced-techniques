@@ -65,13 +65,12 @@
         lightSamples: 4,
         resolutionScale: 0.5,
         accumulation: true,
+        denoise: true, // the mask's blur
         exposure: 0.6,
         fov: 32,
-        // Resolution, as worm-monster's desktop tier: the scene's pixels per CSS pixel, one of RENDER_PIXEL_RATIOS,
-        // which TAAU upscales to the output's
+        // The scene's pixels per CSS pixel, which TAAU upscales to the output's
         renderPixelRatio: 1,
       }
-      const RENDER_PIXEL_RATIOS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
       const MAX_PIXEL_RATIO = 2 // the output's pixels per CSS pixel at most
 
       const renderer = new THREE.WebGPURenderer({ antialias: false }) // TAAU anti-aliases
@@ -220,13 +219,10 @@
       const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder)
       const runnerGLTF = await loading.track((onProgress) => loader.loadAsync('../motion-blur/models/runner.glb', onProgress))
 
-      const runnerBody = new THREE.MeshStandardNodeMaterial({ name: 'runner body', color: '#14566a', roughness: 0.4 })
-      const runnerJoints = new THREE.MeshStandardNodeMaterial({ name: 'runner joints', color: '#1f2b2d', roughness: 0.5 })
-      const runner = runnerGLTF.scene
+      const runner = runnerGLTF.scene // in its own materials: a light grey body, dark joints
       runner.rotation.y = Math.PI / 2 // running to the right, side on
       runner.traverse((child) => {
         if (!child.isSkinnedMesh) return
-        child.material = child.name.includes('joints') ? runnerJoints : runnerBody
         child.castShadow = true
         child.boundingSphere = new THREE.Sphere(new THREE.Vector3(-0.06, 0.84, -0.11), 1.02) // holds every pose of the run
       })
@@ -319,12 +315,11 @@
       shadowFolder.add(params, 'lightSamples', 1, 16, 1).name('light samples').onChange((value) => (shadow.lightSamples = value))
       shadowFolder.add(params, 'resolutionScale', 0.25, 1, 0.25).name('resolution').onChange(setSampling) // of the scene's
       shadowFolder.add(params, 'accumulation').onChange((value) => (shadow.temporalAccumulation = value))
+      shadowFolder.add(params, 'denoise').onChange((value) => (shadow.blurEnabled = value))
       const motion = gui.addFolder('Motion').close()
       motion.add(params, 'pace', 0, 1.5, 0.01).name('runner pace')
       motion.add(params, 'spin', -3, 3, 0.01).name('knot spin (rad/s)')
       motion.add(params, 'bob', 0, 4, 0.01).name('box bob (rad/s)')
-      const resolutionFolder = gui.addFolder('Resolution').close()
-      resolutionFolder.add(params, 'renderPixelRatio', RENDER_PIXEL_RATIOS).name('render pixel ratio').onChange(setSampling)
 
       // ---- Loop ----
 

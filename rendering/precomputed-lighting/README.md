@@ -2,9 +2,9 @@
 
 Self-shadows, bounce light and soft contact shadows for a rigid mesh, precomputed once and shaded live as the mesh turns and the lights move. `SelfShadowVisibilityMasks` stores, per vertex, the directions that escape the mesh as a bit mask; `SelfShadowRadianceTransfer` stores them as 16 spherical-harmonic coefficients, for softer shadows. `PrecomputedRadiosity` adds the light the mesh bounces onto itself, as Enlighten does. `PrecomputedAmbientOcclusion` bakes ambient occlusion and a rect light's soft shadow onto static surfaces, and `ContactOcclusion` darkens the floor under objects as they move. After Sloan et al., [_Precomputed Radiance Transfer_](https://doi.org/10.1145/566654.566612) (2002), Hanrahan et al., [_A Rapid Hierarchical Radiosity Algorithm_](https://doi.org/10.1145/122718.122740) (1991), Martin and Einarsson, [_A Real-Time Radiosity Architecture for Video Games_](https://advances.realtimerendering.com/s2010/index.html) (2010), and Heitz et al., [_Combining Analytic Direct Illumination and Stochastic Shadows_](https://research.nvidia.com/publication/2018-05_combining-analytic-direct-illumination-and-stochastic-shadows) (2018).
 
-<a href="https://marcofugaro.github.io/three-advanced-techniques/rendering/precomputed-lighting/"><img src="index.webp" alt="Precomputed lighting demo" width="600"></a>
+<a href="https://three-advanced-techniques.com/rendering/precomputed-lighting/"><img src="index.webp" alt="Precomputed lighting demo" width="600"></a>
 
-#### Live link: https://marcofugaro.github.io/three-advanced-techniques/rendering/precomputed-lighting/
+#### Live link: https://three-advanced-techniques.com/rendering/precomputed-lighting/
 
 ## Usage
 

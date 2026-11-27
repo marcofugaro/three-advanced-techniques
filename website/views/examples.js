@@ -256,9 +256,9 @@ function renderGallery(mainEl, ctx) {
 
 // The screenshot covers the demo, its own loading screen included, until the scene has drawn. The demo pages are
 // same-origin, so this reads their loading screen (<loading-screen>, or worm-monster's #loading): its stage and bar go
-// on the screenshot's label, and its done class, once its own fade is over, reveals the demo. A page without one
-// reveals three of its frames after its canvas is in, so the first has drawn; a failed load reveals at once, to show
-// its error.
+// on the screenshot's label, and its done class, once its own fade is over, reveals the demo. Worm-monster's ready
+// class, its Start button over the loaded scene, reveals at once. A page without one reveals three of its frames
+// after its canvas is in, so the first has drawn; a failed load reveals at once, to show its error.
 const GIVE_UP_MS = 60_000
 
 function watchLoading(iframe, stage) {
@@ -301,11 +301,12 @@ function watchLoading(iframe, stage) {
       if (loaded && doc.querySelector('canvas')) revealAfterFrames(iframe.contentWindow, 3)
       return
     }
-    if (screen.classList.contains('failed')) return reveal()
+    if (screen.classList.contains('failed') || screen.classList.contains('ready')) return reveal()
     if (screen.classList.contains('done')) return reveal(fadeMs(iframe.contentWindow, screen))
     const text = screen.querySelector('.loading-stage')?.textContent.trim()
     if (text && label.textContent !== text) label.textContent = text
-    const width = screen.querySelector('.bar')?.style.width
+    const percent = screen.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')
+    const width = screen.querySelector('.bar')?.style.width || (percent ? `${percent}%` : '')
     progress.hidden = !width
     if (width) progress.style.width = width
   }
@@ -359,11 +360,15 @@ function renderViewer(mainEl, example, ctx) {
           <img class="stage-placeholder" src="${esc(ctx.rel(example.screenshot))}" alt="" width="1280" height="720" fetchpriority="high" />
           <div class="stage-loading" role="status"><span class="spinner" aria-hidden="true"></span><span class="stage-loading-text">Loading ${esc(example.title)}…</span><span class="stage-progress" aria-hidden="true"></span></div>
           ${'gpu' in navigator ? '' : `<div class="stage-notice">${icon('info')}This demo needs WebGPU, which this browser doesn't offer.</div>`}
-          <aside class="about" aria-label="About ${esc(example.title)}">
+          ${
+            example.technique
+              ? `<aside class="about" aria-label="About ${esc(example.title)}">
             <h2 class="about-title">${esc(example.title)}</h2>
             <p class="about-text">${esc(example.description)}</p>
             ${technique ? `<a class="about-link" href="${docsHref(example.technique)}">${esc(technique.title)} docs${icon('arrow-right')}</a>` : ''}
-          </aside>
+          </aside>`
+              : ''
+          }
         </div>
       </div>
     </div>`

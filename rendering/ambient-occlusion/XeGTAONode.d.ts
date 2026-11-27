@@ -31,8 +31,6 @@ export interface XeGTAONodeOptions {
   changeDetection?: boolean
   /** With a velocity node, reprojects what moves on its own along its motion vectors. Default true. */
   motionVectors?: boolean
-  /** Blurs wider where the history is short, in one more pass, so fresh noise doesn't crawl. Default true. */
-  historyFix?: boolean
   /** World units. Default 0.5. */
   radius?: number
   /** Blends from no occlusion (0) to full (1). Default 1. */
@@ -53,11 +51,11 @@ export interface XeGTAONodeOptions {
   sampleDistributionPower?: number
   /** How far a denoise tap may sit off the center's plane, × view distance. Default 0.011. */
   denoiseTolerance?: number
-  /** With historyFix, the history length under which it blurs wider: in full at 1 frame, gone from here. Default 4. */
+  /** Below this many frames of history the result blurs wider, so fresh noise doesn't crawl. Default 4. */
   historyFixLength?: number
-  /** With historyFix, how far a wider-blur tap may sit off the center's plane, × view distance. Default 0.004. */
+  /** How far a tap of that wider blur may sit off the center's plane, × view distance. Default 0.004. */
   historyFixTolerance?: number
-  /** With historyFix, the AO difference from the center at which a tap stops counting; 0 for any. Default 0.2. */
+  /** The AO difference from the center at which a tap of that wider blur stops counting; 0 for any. Default 0.2. */
   historyFixRange?: number
   /** How far an AO texel's depth may be from the pixel's in the upsample, × view distance. Default 0.02. */
   upsampleTolerance?: number
@@ -114,8 +112,6 @@ export declare class XeGTAONode extends Node<'float'> {
   changeDetection: boolean
   /** With a velocity node, reprojects what moves on its own along its motion vectors. Default true. */
   motionVectors: boolean
-  /** Blurs wider where the history is short, in one more pass, so fresh noise doesn't crawl. Default true. */
-  historyFix: boolean
 
   /** World units. Default 0.5. */
   get radius(): UniformNode<'float'>
@@ -147,13 +143,13 @@ export declare class XeGTAONode extends Node<'float'> {
   /** How far a denoise tap may sit off the center's plane, × view distance. Default 0.011. */
   get denoiseTolerance(): UniformNode<'float'>
   set denoiseTolerance(value: number)
-  /** With historyFix, the history length under which it blurs wider: in full at 1 frame, gone from here. Default 4. */
+  /** Below this many frames of history the result blurs wider, so fresh noise doesn't crawl. Default 4. */
   get historyFixLength(): UniformNode<'float'>
   set historyFixLength(value: number)
-  /** With historyFix, how far a wider-blur tap may sit off the center's plane, × view distance. Default 0.004. */
+  /** How far a tap of that wider blur may sit off the center's plane, × view distance. Default 0.004. */
   get historyFixTolerance(): UniformNode<'float'>
   set historyFixTolerance(value: number)
-  /** With historyFix, the AO difference from the center at which a tap stops counting; 0 for any. Default 0.2. */
+  /** The AO difference from the center at which a tap of that wider blur stops counting; 0 for any. Default 0.2. */
   get historyFixRange(): UniformNode<'float'>
   set historyFixRange(value: number)
   /** How far an AO texel's depth may be from the pixel's in the upsample, × view distance. Default 0.02. */

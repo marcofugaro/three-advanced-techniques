@@ -1,4 +1,4 @@
-<h1 align="center"><img src=".github/header.svg" width="900" alt="three-advanced-techniques"></h1>
+<h1 align="center"><a href="https://three-advanced-techniques.com/"><img src=".github/header.svg" width="900" alt="three-advanced-techniques"></a></h1>
 
 ## Usage
 
@@ -12,7 +12,7 @@ You can import each technique or node like this:
 import { xeGTAO } from 'three-advanced-techniques'
 ```
 
-And then use it with three.js' [WebGPURenderer](https://threejs.org/docs/#WebGPURenderer). Each technique's README linked below has its own usage.
+And then use it with three.js' [WebGPURenderer](https://threejs.org/docs/#WebGPURenderer). The [docs](https://three-advanced-techniques.com/docs/) have each technique's usage and every module's reference, and each technique's README linked below has its usage too.
 
 ## Rendering
 

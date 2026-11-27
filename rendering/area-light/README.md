@@ -2,9 +2,9 @@
 
 Accurate soft shadows for three.js's `RectAreaLight`, ray-marched in screen space toward the light's whole area. Each pixel marches a fitted shadow map toward a few points on the emitter, after Xie, Tabellion and Pearce, [_Soft Shadows by Ray Tracing Multilayer Transparent Shadow Maps_](https://doi.org/10.2312/EGWR/EGSR07/265-276) (2007), and the frames accumulate and filter in the order of Schied et al., [_Spatiotemporal Variance-Guided Filtering_](https://research.nvidia.com/publication/2017-07_spatiotemporal-variance-guided-filtering-real-time-reconstruction-path-traced) (2017). With it, `rectAreaLTC` gives three's rect-light shading, after Heitz et al., [_Real-Time Polygonal-Light Shading with Linearly Transformed Cosines_](https://eheitzresearch.wordpress.com/415-2/) (2016), as TSL helpers for custom lighting models.
 
-<a href="https://marcofugaro.github.io/three-advanced-techniques/rendering/area-light/"><img src="index.webp" alt="Area light demo" width="600"></a>
+<a href="https://three-advanced-techniques.com/rendering/area-light/"><img src="index.webp" alt="Area light demo" width="600"></a>
 
-#### Live link: https://marcofugaro.github.io/three-advanced-techniques/rendering/area-light/
+#### Live link: https://three-advanced-techniques.com/rendering/area-light/
 
 ## Usage
 

@@ -115,13 +115,14 @@
       const BACKGROUND = new THREE.Color('#c3b6a6')
 
       const params = {
-        // 'masks' (SelfShadowVisibilityMasks), 'precomputed radiance transfer' (SelfShadowRadianceTransfer) or 'off'
-        selfShadow: 'masks',
-        // the masks' spread while the statuette turns: 'clustered kernel' or 'steps'
-        motionSpread: 'clustered kernel',
+        selfShadow: true,
+        // 'visibility masks' (SelfShadowVisibilityMasks) or 'radiance transfer' (SelfShadowRadianceTransfer)
+        selfShadowType: 'visibility masks',
+        // the masks' motionKernel while the statuette turns: 'clustered', or 'none', which steps
+        motionKernel: 'clustered',
         transferRays: 256,
-        bounce: true,
-        castShadow: true,
+        radiosity: true,
+        shadows: true,
         occlusion: true,
         // the floor's and the platter's, baked in the turntable's frame: right while the statuette turns about y alone
         contactOcclusion: true,
@@ -132,14 +133,10 @@
         fill: 5,
         lightsTurn: 180, // °, both lights about the turntable's vertical axis
         animateLights: false, // turns them on, as the turntable turns
-        lightsSpeed: 60, // °/s
+        lightsSpeed: 80, // °/s
         exposure: 1,
-        fov: 30, // degrees, vertical
-        // Resolution, as worm-monster's desktop tier: the scene's pixels per CSS pixel, one of RENDER_PIXEL_RATIOS,
-        // which TAAU upscales to the output's
-        renderPixelRatio: 1,
       }
-      const RENDER_PIXEL_RATIOS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
+      const RENDER_PIXEL_RATIO = 1 // the scene's pixels per CSS pixel, which TAAU upscales to the output's
       const MAX_PIXEL_RATIO = 2 // the output's pixels per CSS pixel at most
 
       const loading = document.querySelector('loading-screen')
@@ -167,7 +164,7 @@
       scene.environmentIntensity = 0.1
       pmrem.dispose()
 
-      const camera = new THREE.PerspectiveCamera(params.fov, window.innerWidth / window.innerHeight, 0.1, 60)
+      const camera = new THREE.PerspectiveCamera(30, window.innerWidth / window.innerHeight, 0.1, 60)
       const controls = new OrbitControls(camera, renderer.domElement)
       controls.target.set(0.011, 0.248, 0.024)
       controls.enableDamping = true
@@ -361,8 +358,10 @@
       const transfer = new SelfShadowRadianceTransfer(lightingMesh, LIGHTS)
       // Per lighting vertex, the key's visibility in x and the fill's in y from the technique the GUI picks,
       // unsaturated: the transfer's ratio overshoots [0, 1] and is saturated once interpolated
-      const SELF_SHADOWS = ['off', 'masks', 'precomputed radiance transfer']
-      const selfShadowMode = uniform(SELF_SHADOWS.indexOf(params.selfShadow))
+      const SELF_SHADOW_TYPES = ['visibility masks', 'radiance transfer']
+      // 0 off, 1 the masks, 2 the transfer
+      const selfShadowModeOf = () => (params.selfShadow ? 1 + SELF_SHADOW_TYPES.indexOf(params.selfShadowType) : 0)
+      const selfShadowMode = uniform(selfShadowModeOf())
       const masksRead = storage(masks.visibility, 'vec4', count).toReadOnly()
       const transferRead = storage(transfer.visibility, 'vec4', count).toReadOnly()
       const selfShadowAt = (i) =>
@@ -543,8 +542,8 @@
         ...atRest.flatMap(({ geometry }) => [geometry.attributes.position.array, geometry.index?.array ?? []]),
       )
 
-      // The masks' motion spread: a clustered kernel per softness, built in workers and kept, the starting softness's
-      // and the latest other's
+      // The masks' motion kernel: a clustered one per softness, built in workers and kept, the starting softness's and
+      // the latest other's
       const MOTION_KERNEL = { clusterSize: 2, mass: 0.99 }
       const startSigma = masks.softness
       const motionKernels = new Map()
@@ -563,7 +562,7 @@
         }
         masks.diffusion.checkKernel(kernel)
         motionKernels.set(startSigma, Promise.resolve(kernel))
-        if (params.motionSpread === 'clustered kernel' && masks.softness === startSigma) masks.motionKernel = kernel
+        if (params.motionKernel === 'clustered' && masks.softness === startSigma) masks.motionKernel = kernel
       }
 
       // The ambient occlusion on the statuette, and the contact occlusion on the floor and the platter about it
@@ -736,9 +735,9 @@
       pipeline.outputColorTransform = false
       pipeline.outputNode = renderOutput(taauNode.getTextureNode())
 
-      // The scene pass at renderPixelRatio and the shadows' screen-space masks at half of it, their default share of the
-      // drawing buffer; TAAU upscales the scene to the output's pixel ratio.
-      const sceneScale = () => Math.min(1, params.renderPixelRatio / renderer.getPixelRatio())
+      // The scene pass at RENDER_PIXEL_RATIO and the shadows' screen-space masks at half of it, their default share of
+      // the drawing buffer; TAAU upscales the scene to the output's pixel ratio.
+      const sceneScale = () => Math.min(1, RENDER_PIXEL_RATIO / renderer.getPixelRatio())
       function setSampling() {
         const scale = sceneScale()
         scenePass.setResolutionScale(scale)
@@ -760,70 +759,72 @@
       // Bakes what index.bake didn't hold, shows it and saves the file, to keep beside the page
       const bakeButton = gui.add({ bake: bakeAndSave }, 'bake').name(`bake (saves ${BAKE_FILE})`)
       // Only the technique shown updates; its visibility then feeds the bounce
-      function setSelfShadow(method) {
-        selfShadowMode.value = SELF_SHADOWS.indexOf(method)
+      function setSelfShadow() {
+        selfShadowMode.value = selfShadowModeOf()
         radiosity.needsUpdate = true
       }
-      gui.add(params, 'selfShadow', SELF_SHADOWS.slice(1).concat('off')).name('self-shadow').onChange(setSelfShadow)
-      gui.add(params, 'bounce').name('bounce (radiosity)').onChange((on) => (bounceAmount.value = on ? 1 : 0))
+      gui.add(params, 'selfShadow').name('self-shadow').onChange(setSelfShadow)
+      gui.add(params, 'selfShadowType', SELF_SHADOW_TYPES).name('self-shadow type').onChange(setSelfShadow)
+      gui.add(params, 'radiosity').name('radiosity').onChange((on) => (bounceAmount.value = on ? 1 : 0))
       gui
-        .add(params, 'castShadow')
-        .name('cast shadows (realtime)')
-        .onChange((on) => shadows.forEach((shadow) => (shadow.enabled = on)))
-      gui.add(params, 'occlusion').name('ambient occlusion').onChange((on) => (occlusionAmount.value = on ? 1 : 0))
+        .add(params, 'occlusion')
+        .name('ambient occlusion')
+        .onChange((on) => (occlusionAmount.value = on ? 1 : 0))
       gui
         .add(params, 'contactOcclusion')
-        .name('contact occlusion (floor)')
+        .name('contact occlusion')
         .onChange((on) => (floorOcclusion.intensity = platterOcclusion.intensity = on ? 1 : 0))
+      gui
+        .add(params, 'shadows')
+        .name('rect area light shadows')
+        .onChange((on) => shadows.forEach((shadow) => (shadow.enabled = on)))
       gui.add(params, 'turntable', 0, 1.5, 0.01).name('turntable (rad/s)')
-      const look = gui.addFolder('Statuette')
-      look.add(params, 'bounces', 1, 4, 1).onChange((value) => (radiosity.bounces = value))
 
-      // The masks' spread over the surface while the statuette turns, at σ = softness: 'clustered kernel' one gather
-      // built in workers for that σ, an approximation (0.3 ms of the mini's GPU; the starting softness's built as the
-      // page loads, another's after its change, about 17 s on the mini at 1.5 cm), 'steps' ⌈σ²·maxRate⌉ explicit
-      // steps a frame (175 at 1.5 cm, 2.6 ms)
-      const masksFolder = gui.addFolder('Masks')
+      // The masks' spread over the surface while the statuette turns, at σ = softness: 'clustered' one gather built in
+      // workers for that σ, an approximation (0.3 ms of the mini's GPU; the starting softness's built as the page
+      // loads, another's after its change, about 17 s on the mini at 1.5 cm), 'none' ⌈σ²·maxRate⌉ explicit steps a
+      // frame (175 at 1.5 cm, 2.6 ms)
+      const masksFolder = gui.addFolder('Self-shadow visibility masks')
       let kernelBuild = 0
-      async function setMotionSpread() {
+      async function setMotionKernel() {
         const build = ++kernelBuild
         const sigma = masks.softness
-        if (params.motionSpread === 'steps' || !(sigma > 0)) {
+        if (params.motionKernel === 'none' || !(sigma > 0)) {
           masks.motionKernel = null
-          spread.name('motion spread')
+          kernelController.name('motion kernel')
           return
         }
         if (masks.motionKernel?.sigma === sigma) return
-        spread.name('motion spread (building…)')
+        kernelController.name('motion kernel (building…)')
         const kernel = await motionKernelFor(sigma)
         // a later choice or softness supersedes it
         if (build !== kernelBuild) return
         masks.motionKernel = kernel
         await masks.compileAsync(renderer)
-        if (build === kernelBuild) spread.name('motion spread')
+        if (build === kernelBuild) kernelController.name('motion kernel')
       }
       masksFolder
         .add(params, 'softness', 0, 5, 0.1)
         .name('softness (cm)')
         .onChange((value) => (masks.softness = value / 100))
-        .onFinishChange(setMotionSpread)
-      masksFolder.add(masks, 'tier', ['auto', 'rest']).name('while turning')
-      const spread = masksFolder
-        .add(params, 'motionSpread', ['steps', 'clustered kernel'])
-        .name('motion spread')
-        .onChange(setMotionSpread)
+        .onFinishChange(setMotionKernel)
+      masksFolder.add(masks, 'tier', ['auto', 'motion', 'rest'])
+      const kernelController = masksFolder
+        .add(params, 'motionKernel', ['clustered', 'none'])
+        .name('motion kernel')
+        .onChange(setMotionKernel)
 
       // The transfer's evaluation is one compute over the lighting vertices whenever a light moves in their frame
       // (0.04 ms of the mini's GPU at order 4 and 4 × 4 samples); a new rays count bakes again in workers (2.6 s at
       // 256)
-      const transferFolder = gui.addFolder('Precomputed radiance transfer')
-      transferFolder.add(transfer, 'order', [2, 3, 4]).name('order (bands)')
-      transferFolder.add(transfer, 'samples', [2, 3, 4, 6, 8]).name('samples (per rect axis)')
+      const transferFolder = gui.addFolder('Self-shadow radiance transfer')
+      transferFolder.add(transfer, 'order', [2, 3, 4])
+      transferFolder.add(transfer, 'samples', [2, 3, 4, 6, 8])
       // A new count stops the bake of the last one, which then keeps nothing
       let transferBake = null
       const rays = transferFolder
         .add(params, 'transferRays', [64, 128, 256, 512, 1024])
-        .name('rays (bake)')
+        .name('rays')
         .onChange(async (value) => {
           transferBake?.abort()
           const bake = (transferBake = new AbortController())
@@ -834,21 +835,16 @@
             if (bake.signal.aborted) return
             throw error
           }
-          rays.name('rays (bake)')
+          rays.name('rays')
         })
+      const radiosityFolder = gui.addFolder('Radiosity')
+      radiosityFolder.add(params, 'bounces', 1, 4, 1).onChange((value) => (radiosity.bounces = value))
       const lights = gui.addFolder('Lights')
       lights.add(params, 'animateLights').name('animate lights')
       lights.add(params, 'lightsSpeed', -90, 90, 1).name('lights speed (°/s)')
       lights.add(params, 'key', 0, 300, 1).onChange((value) => (key.intensity = value))
       lights.add(params, 'fill', 0, 20, 0.1).onChange((value) => (fill.intensity = value))
       lights.add(params, 'exposure', 0.2, 3, 0.01).onChange((value) => (renderer.toneMappingExposure = value))
-      const view = gui.addFolder('Camera')
-      view.add(params, 'fov', 10, 90, 1).name('fov (°)').onChange((value) => {
-        camera.fov = value
-        camera.updateProjectionMatrix()
-      })
-      const resolution = gui.addFolder('Resolution')
-      resolution.add(params, 'renderPixelRatio', RENDER_PIXEL_RATIOS).name('render pixel ratio').onChange(setSampling)
 
       // ---- Loop ----
 
@@ -869,9 +865,10 @@
         }
         turntable.updateMatrixWorld()
         // the self-shadow writes the visibility the radiosity's compute then reads
-        const selfShadow = { masks, 'precomputed radiance transfer': transfer }[params.selfShadow]
+        const selfShadow =
+          params.selfShadow && { 'visibility masks': masks, 'radiance transfer': transfer }[params.selfShadowType]
         if (selfShadow?.update(renderer)) radiosity.needsUpdate = true
-        if (params.bounce) radiosity.update(renderer)
+        if (params.radiosity) radiosity.update(renderer)
         controls.update()
         // every transform first, then the shadows' screen-space masks, before the beauty
         for (const shadow of shadows) shadow.render(renderer, scene, camera)

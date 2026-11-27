@@ -84,13 +84,10 @@
         view: 'beauty',
         speed: 1,
         height: 0.4,
-        haze: `#${HAZE.getHexString()}`,
         shadowMapSize: 1024,
-        // Resolution, as worm-monster's desktop tier: the scene's pixels per CSS pixel, one of RENDER_PIXEL_RATIOS,
-        // which TAAU upscales to the output's
+        // The scene's pixels per CSS pixel, which TAAU upscales to the output's
         renderPixelRatio: 1,
       }
-      const RENDER_PIXEL_RATIOS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
       const MAX_PIXEL_RATIO = 2 // the output's pixels per CSS pixel at most
 
       const loading = document.querySelector('loading-screen')
@@ -375,44 +372,16 @@
       gui.add(occlusion.power, 'value', 0.5, 4, 0.05).name('power')
       gui.add(params, 'aoResolution', 0.25, 1, 0.25).name('resolution').onChange(setSampling)
       gui.add(occlusion, 'temporalAccumulation').name('temporal accumulation')
-      gui.add(occlusion, 'historyFix').name('history fix')
       gui.add(occlusion, 'motionSliceCount', 2, 4, 1).name('slices in motion')
-      // Logs the current view as code for the camera's start, and copies it. The width in view stands in for the
-      // distance, so a narrow screen still backs off.
-      const view = {
-        log() {
-          const xyz = (vector) => vector.toArray().map((value) => +value.toFixed(3)).join(', ')
-          const offset = camera.position.clone().sub(controls.target)
-          const halfWidth = Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect)
-          const width = +(offset.length() * Math.tan(halfWidth)).toFixed(2)
-          const code = [
-            `controls.target.set(${xyz(controls.target)})`,
-            `const distance = THREE.MathUtils.clamp(${width} / Math.tan(halfWidth), 5, 12)`,
-            `camera.position.set(${xyz(offset)}).setLength(distance).add(controls.target)`,
-          ].join('\n')
-          console.log(code)
-          navigator.clipboard?.writeText(code).catch(() => {})
-        },
-      }
-      gui.add(view, 'log').name('log view')
       const field = gui.addFolder('Hexagons')
       field.add(params, 'speed', 0, 3, 0.01)
       field.add(params, 'height', 0.1, 0.6, 0.01).name('step (m)').onChange((value) => (uStep.value = value))
-      const haze = gui.addFolder('Fog')
-      haze.add(scene.fog, 'near', 0, 40, 0.1).decimals(1).name('near (m)')
-      haze.add(scene.fog, 'far', 1, 60, 0.1).decimals(1).name('far (m)')
-      haze.addColor(params, 'haze').name('color').onChange((value) => {
-        scene.fog.color.set(value)
-        scene.background.set(value)
-      })
       const shadow = gui.addFolder('Shadow')
       shadow.add(key.shadow, 'intensity', 0, 1, 0.01)
       shadow.add(key.shadow, 'radius', 0, 10, 0.1).name('softness')
       shadow.add(key.shadow, 'bias', -0.005, 0.005, 0.0001)
       shadow.add(key.shadow, 'normalBias', 0, 0.1, 0.001).name('normal bias')
       shadow.add(params, 'shadowMapSize', [512, 1024, 2048, 4096]).name('map size').onChange((value) => key.shadow.mapSize.setScalar(value))
-      const resolution = gui.addFolder('Resolution')
-      resolution.add(params, 'renderPixelRatio', RENDER_PIXEL_RATIOS).name('render pixel ratio').onChange(setSampling)
 
       await loading.stage('Compiling shaders…')
       await taauNode.compileAsync(renderer)

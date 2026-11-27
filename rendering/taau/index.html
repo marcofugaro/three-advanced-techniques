@@ -332,28 +332,13 @@
       gui.add(params, 'swing', 0, 2, 0.01).name('pendulum speed')
       gui.add(params, 'spin', 0, 1, 0.01).name('sculpture spin')
       gui.add(params, 'drift', 0, 1, 0.01).name('camera drift')
-      const resolution = gui.addFolder('Resolution') // open: TAAU's upscaling is the demo's subject
-      resolution.add(params, 'renderPixelRatio', 0.5, 2, 0.5).name('TAAU pixel ratio').onChange(setSampling)
+      gui.add(params, 'renderPixelRatio', 0.5, 2, 0.5).name('TAAU pixel ratio').onChange(setSampling)
       const look = gui.addFolder('Camera').close()
       look.add(params, 'fov', 15, 70, 1).onChange((value) => {
         camera.fov = value
         camera.updateProjectionMatrix()
       })
       look.add(params, 'exposure', 0.2, 3, 0.01).onChange((value) => (renderer.toneMappingExposure = value))
-      // Logs the current view as code for the camera's start, and copies it.
-      const view = {
-        log() {
-          const xyz = (vector) => vector.toArray().map((value) => +value.toFixed(3)).join(', ')
-          const code = [
-            `camera.position.set(${xyz(camera.position)})`,
-            `controls.target.set(${xyz(controls.target)})`,
-            `fov: ${camera.fov}`,
-          ].join('\n')
-          console.log(code)
-          navigator.clipboard?.writeText(code).catch(() => {})
-        },
-      }
-      look.add(view, 'log').name('log view')
 
       // ---- Loop ----
 

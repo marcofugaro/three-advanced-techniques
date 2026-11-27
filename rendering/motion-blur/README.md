@@ -2,9 +2,9 @@
 
 Object and camera motion blur as a tile-based reconstruction filter, after McGuire et al., [_A Reconstruction Filter for Plausible Motion Blur_](https://dblp.uni-trier.de/rec/conf/si3d/McGuireHBO12.html) (2012), Guertin et al., [_A Fast and Stable Feature-Aware Motion Blur Filter_](https://doi.org/10.2312/hpg.20141093) (2014), Jimenez, [_Next Generation Post Processing in Call of Duty: Advanced Warfare_](https://www.iryoku.com/next-generation-post-processing-in-call-of-duty-advanced-warfare/) (2014).
 
-<a href="https://marcofugaro.github.io/three-advanced-techniques/rendering/motion-blur/"><img src="index.webp" alt="Motion blur demo" width="600"></a>
+<a href="https://three-advanced-techniques.com/rendering/motion-blur/"><img src="index.webp" alt="Motion blur demo" width="600"></a>
 
-#### Live link: https://marcofugaro.github.io/three-advanced-techniques/rendering/motion-blur/
+#### Live link: https://three-advanced-techniques.com/rendering/motion-blur/
 
 ## Usage
 

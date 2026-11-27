@@ -45,6 +45,10 @@ Advanced three.js WebGPU techniques, written in TSL and shipped as plain ES modu
 ## Conventions
 
 - IMPORTANT: Please make the comments you write concise and timeless.
+- IMPORTANT: Write the text users read (the website's cards, the READMEs, the docs' comments in `.d.ts` files, GUI
+  labels) in plain words a three.js user without a graphics background can follow: what it looks like or what it buys
+  first, how it works after. Leave graphics jargon out where the sentence works without it (cube faces, mip levels,
+  PMREM, texels, σ, bands), or explain it where it first appears. Technique and module names stay as they are.
 - Each module opens with a short usage snippet.
 - IMPORTANT: Each main module (one the package entry re-exports) has a `.d.ts` beside it that declares only its
   public, user-facing API: its exports, constructor options, and the members users read, set or call. Leave out
@@ -63,7 +67,7 @@ Advanced three.js WebGPU techniques, written in TSL and shipped as plain ES modu
   `loading.stage('Compiling shaders…')` (or another stage) before work that blocks the page. They anti-alias with TAAU
   (`rendering/taau/TAAUNode.js`), never TRAA, FXAA or MSAA.
 - IMPORTANT: Every demo upscales with TAAU as worm-monster's desktop tier does: the scene renders at `renderPixelRatio`
-  (1 px per CSS pixel by default), a GUI dropdown in a 'Resolution' folder, and TAAU upscales it to the output's
+  (1 px per CSS pixel, no GUI control), and TAAU upscales it to the output's
   pixel ratio, fixed at `MAX_PIXEL_RATIO` (2), not a param. Every pass that renders the scene, and every composite that reads it before TAAU, follows the
   scene's scale (`setResolutionScale(sceneScale())`); XeGTAO runs at half of it. See
   `rendering/screen-space-reflections/index.html` (`setSampling`). The TAAU demo, whose subject is the upscaling,

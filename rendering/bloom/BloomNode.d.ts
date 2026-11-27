@@ -1,4 +1,8 @@
-// Bloom in 8 passes with the look of three's `bloom()`, on a texture node:
+// A soft glow around the bright parts of the image, with the look of the Unreal Bloom in 8 passes instead of 12.
+// Lamps, neon and hot highlights bleed light into their surroundings: whatever is brighter than `threshold` is
+// blurred at five sizes, from a tight halo to a wide haze, and `radius` shifts the weight from the halo toward the
+// haze. The wider sizes are blurred at a quarter of the usual pixels, so the same look costs less. The input must be
+// a texture node, such as a pass output:
 //
 //   const sceneColor = scenePass.getTextureNode()
 //   const bloomNode = bloom(sceneColor, { strength: 1, radius: 0.5, threshold: 0.8 })
@@ -66,6 +70,7 @@ export declare class BloomNode extends Node<'vec4'> {
   compileAsync(renderer: Renderer): Promise<void>
 }
 
+/** A soft glow around what's brighter than `threshold` in a texture node; add it to the scene's color. */
 export declare const bloom: (node: TextureNode, options?: BloomNodeOptions) => BloomNode
 
 export default BloomNode

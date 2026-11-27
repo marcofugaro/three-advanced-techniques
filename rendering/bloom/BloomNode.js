@@ -1,18 +1,18 @@
-// Bloom: three's UnrealBloom (BloomNode) look in 8 passes instead of 12.
+// Bloom: the Unreal Bloom's look in 8 passes instead of 12.
 //
-// The composite math and each mip's Gaussian footprint match the stock node; the work is restructured:
+// The composite math and each mip's Gaussian footprint match the Unreal Bloom's; the work is restructured:
 //  - the luminance high pass is fused into mip0's horizontal blur taps, unmerged at half-res texel centres, so it
-//    keeps stock's threshold-then-blur order exactly
-//  - mip0 keeps stock's separable pair (it draws the tight core glow)
+//    keeps the Unreal Bloom's threshold-then-blur order exactly
+//  - mip0 keeps the Unreal Bloom's separable pair (it draws the tight core glow)
 //  - mips 1-4 are single-pass 2x-downsample hops with 2D Gaussian kernels: cascaded Gaussians compose
-//    (sigma_total² = Σ sigma_i²), so each mip reaches stock's cumulative blur while touching far fewer pixels
+//    (sigma_total² = Σ sigma_i²), so each mip reaches the Unreal Bloom's cumulative blur while touching far fewer
+//    pixels
 //  - the composite keeps its own half-res pass, so the consumer reads one texture instead of five
 //
-// The mips live one octave below stock (1/8..1/64 instead of 1/4..1/32): their content is >= 1.7 sigma-texels smooth
-// at storage res, which the composite's bilinear upsample reconstructs cleanly.
+// The mips live one octave below the Unreal Bloom's (1/8..1/64 instead of 1/4..1/32): their content is >= 1.7
+// sigma-texels smooth at storage res, which the composite's bilinear upsample reconstructs cleanly.
 //
-// The look of `bloom()` from 'three/addons/tsl/display/BloomNode.js', with the settings in an options object. The input
-// must be a texture node (a pass output), since the high pass samples it at offset UVs:
+// The input must be a texture node (a pass output), since the high pass samples it at offset UVs:
 //
 //   const sceneColor = scenePass.getTextureNode()
 //   const bloomNode = bloom(sceneColor, { strength: 1, radius: 0.5, threshold: 0.8 })
@@ -53,13 +53,13 @@ const _quadMesh = new QuadMesh()
 const _size = new Vector2()
 let _rendererState
 
-// Stock UnrealBloom per-mip kernel radii; sigma = K/3 texels, at scales 1/2..1/32.
-const STOCK_KERNEL_SIZES = [6, 10, 14, 18, 22]
+// The Unreal Bloom's per-mip kernel radii; sigma = K/3 texels, at scales 1/2..1/32.
+const UNREAL_KERNEL_SIZES = [6, 10, 14, 18, 22]
 const MIP_FACTORS = [1.0, 0.8, 0.6, 0.4, 0.2]
 
 // Downsample hops of mips 1-4, as fractions of mip0's resolution, each a 2x
 // downsample. Intermediate hops blur by HOP_SIGMA texels; each mip's last hop
-// takes the variance left, so the cumulative blur matches stock.
+// takes the variance left, so the cumulative blur matches the Unreal Bloom's.
 const MIP_HOPS = [[2, 4], [8], [16], [32]]
 const HOP_SIGMA = 1.55 // keeps intermediate kernels at 5x5 merged taps
 
@@ -92,7 +92,7 @@ function gaussianTaps(sigma, radius) {
 }
 
 // Per-axis second moment of a merged tap set — the discrete blur variance the
-// kernel actually applies, which the hop solver matches against stock.
+// kernel actually applies, which the hop solver matches against the Unreal Bloom's.
 function tapsVariance(taps) {
   let total = taps[0].weight
   let varSum = 0
@@ -104,7 +104,7 @@ function tapsVariance(taps) {
 }
 
 // A hop kernel's radius: odd, so every coefficient shares a fetch, and
-// reaching 2.5 sigma, about where stock truncates.
+// reaching 2.5 sigma, about where the Unreal Bloom truncates.
 function hopRadius(sigma) {
   return 2 * Math.ceil(1.25 * sigma) + 1
 }
@@ -121,9 +121,9 @@ function tapsForVariance(targetVariance) {
   return gaussianTaps(sigma, radius)
 }
 
-// The stock kernels lose ~0.5% energy per pass (unnormalized discrete
-// coefficients); each mip's last hop replicates it to match stock's brightness.
-function stockKernelSum(kernelRadius) {
+// The Unreal Bloom's kernels lose ~0.5% energy per pass (unnormalized discrete
+// coefficients); each mip's last hop replicates it to match the Unreal Bloom's brightness.
+function unrealKernelSum(kernelRadius) {
   const sigma = kernelRadius / 3
   let sum = 0.39894 / sigma
   for (let i = 1; i < kernelRadius; i++) {
@@ -164,7 +164,7 @@ class BloomNode extends Node {
     }
   }
 
-  /** Scale factor for the internal render targets, like stock. Read every frame. */
+  /** Scale factor for the internal render targets, like the Unreal Bloom's. Read every frame. */
   resolutionScale = 0.5
 
   #u = Object.fromEntries(Object.entries(SETTINGS).map(([name, value]) => [name, uniform(value)]))
@@ -216,10 +216,10 @@ class BloomNode extends Node {
 
     MIP_HOPS.forEach((scales, i) => {
       const mip = i + 1
-      // Stock's discrete variance for this mip (sigma = K/3 texels at scale
+      // The Unreal Bloom's discrete variance for this mip (sigma = K/3 texels at scale
       // 2^-mip), in mip0 texels, minus the extra widening of our coarser
       // bilinear upsample (a tent filter, variance 1/6 texel² at storage res).
-      const kernelSize = STOCK_KERNEL_SIZES[mip]
+      const kernelSize = UNREAL_KERNEL_SIZES[mip]
       let remaining =
         tapsVariance(gaussianTaps(kernelSize / 3, kernelSize)) * 4 ** mip + (4 ** mip - scales.at(-1) ** 2) / 6
 
@@ -236,7 +236,7 @@ class BloomNode extends Node {
           renderTarget,
           scale,
           taps1D,
-          gain: isLast ? stockKernelSum(kernelSize) ** 2 : 1,
+          gain: isLast ? unrealKernelSum(kernelSize) ** 2 : 1,
           sourceTexture: texture(sourceRenderTarget.texture),
           invSize: uniform(new Vector2()),
           material: null,
@@ -279,7 +279,7 @@ class BloomNode extends Node {
     for (const [i, tint] of this.#bloomTintColors.entries()) if (colors[i]) tint.copy(colors[i])
   }
 
-  /** The composited bloom as a texture node, like stock's. */
+  /** The composited bloom as a texture node. */
   getTextureNode() {
     return this.#textureOutput
   }
@@ -419,12 +419,12 @@ class BloomNode extends Node {
 
   #buildBlurs() {
     const sharedContext = this.#sharedContext ?? {}
-    const mip0Sigma = STOCK_KERNEL_SIZES[0] / 3
-    const mip0Taps = signedTaps(gaussianTaps(mip0Sigma, STOCK_KERNEL_SIZES[0]))
-    // Stock's unnormalized coefficient scale, kept for exact mip0 brightness.
+    const mip0Sigma = UNREAL_KERNEL_SIZES[0] / 3
+    const mip0Taps = signedTaps(gaussianTaps(mip0Sigma, UNREAL_KERNEL_SIZES[0]))
+    // The Unreal Bloom's unnormalized coefficient scale, kept for exact mip0 brightness.
     const mip0Scale = 0.39894 / mip0Sigma
 
-    // Mip0 vertical blur: the stock kernel
+    // Mip0 vertical blur: the Unreal Bloom's kernel
     const blurV = Fn(() => {
       const uvNode = uv()
       const sum = vec3(0).toVar()
@@ -465,7 +465,7 @@ class BloomNode extends Node {
       hop.material.needsUpdate = true
     }
 
-    // Composite at mip0 res, like stock: the consumer reads one texture
+    // Composite at mip0 res, like the Unreal Bloom: the consumer reads one texture
     const bloomTintColors = uniformArray(this.bloomTintColors)
 
     const composite = Fn(() => {
@@ -487,18 +487,18 @@ class BloomNode extends Node {
   }
 
   // Mip0 horizontal blur with the high pass fused into every tap. The taps stay unmerged on half-res texel centres,
-  // where the bilinear fetch of the input equals stock's bright-pass value (merging needs thresholded data).
+  // where the bilinear fetch of the input equals the Unreal Bloom's bright-pass value (merging needs thresholded data).
   #buildHighPass() {
     this.#builtHighPassFn = this.#highPassFn
     this.#builtInputNode = this.inputNode
-    const mip0Sigma = STOCK_KERNEL_SIZES[0] / 3
-    // Stock's unnormalized coefficient scale, kept for exact mip0 brightness.
+    const mip0Sigma = UNREAL_KERNEL_SIZES[0] / 3
+    // The Unreal Bloom's unnormalized coefficient scale, kept for exact mip0 brightness.
     const mip0Scale = 0.39894 / mip0Sigma
 
     const highPassBlurH = Fn(() => {
       const uvNode = uv()
       const sum = vec3(0).toVar()
-      for (let i = 1 - STOCK_KERNEL_SIZES[0]; i < STOCK_KERNEL_SIZES[0]; i++) {
+      for (let i = 1 - UNREAL_KERNEL_SIZES[0]; i < UNREAL_KERNEL_SIZES[0]; i++) {
         const weight = Math.exp((-0.5 * i * i) / (mip0Sigma * mip0Sigma))
         const sampleUv = uvNode.add(vec2(i, 0).mul(this.#invSizeMip0))
         const bright = this.#highPassFn({

@@ -168,11 +168,11 @@ const SETTINGS = {
   sampleDistributionPower: 2,
   // × view distance: how far a denoise tap may sit off the center's plane
   denoiseTolerance: 0.011,
-  // with historyFix, the history length under which the result blurs wider: in full at 1 frame, gone from this length
+  // the history length under which the history fix blurs wider: in full at 1 frame, gone from this length
   historyFixLength: 4,
-  // with historyFix, × view distance: how far a tap of the wider blur may sit off the center's plane
+  // × view distance: how far a tap of the history fix may sit off the center's plane
   historyFixTolerance: 0.004,
-  // with historyFix, the AO difference from the center at which a tap of the wider blur stops counting (0: any)
+  // the AO difference from the center at which a tap of the history fix stops counting (0: any)
   historyFixRange: 0.2,
   // × view distance: how far an AO texel's depth may be from the pixel's in the upsample
   upsampleTolerance: 0.02,
@@ -211,7 +211,6 @@ const OPTIONS = [
   'temporalAccumulation',
   'changeDetection',
   'motionVectors',
-  'historyFix',
   ...Object.keys(SETTINGS),
 ]
 
@@ -354,11 +353,6 @@ class XeGTAONode extends Node {
    * occluder in the kernel's footprint moves. Off, the camera alone reprojects; the passes still read the velocity.
    */
   motionVectors = true
-  /**
-   * Blurs the result wider where its history is short, in one more pass, so a moved occluder's noise doesn't crawl
-   * while the history rebuilds. Off saves the pass.
-   */
-  historyFix = true
 
   #u = Object.fromEntries(Object.entries(SETTINGS).map(([name, value]) => [name, uniform(value)]))
   #normalNode = null
@@ -432,7 +426,7 @@ class XeGTAONode extends Node {
     this.#createTargets()
     // AO, view distance, history length, variance: with temporal accumulation they alternate, the other the history
     this.#resultTargets = [0, 1].map((i) => createTarget(`XeGTAO.Result${i}`, RGBAFormat, HalfFloatType))
-    // with the history fix, the accumulated result it reads
+    // the accumulated result the history fix reads
     this.#accumulateTarget = createTarget('XeGTAO.Accumulate', RGBAFormat, HalfFloatType)
     // the change mask per 4×4 tile (moved, closest distance), and its dilation along x; the accumulation reads the
     // first bilinearly, so its edges ramp over a tile
@@ -657,7 +651,6 @@ class XeGTAONode extends Node {
     if (temporal) passes.push([change, mask], [dilateX, maskX], [dilateY, mask])
     passes.push([ao, this.#rawTarget])
     if (!temporal) passes.push([this.denoise ? denoise : copy, result])
-    else if (!this.historyFix) passes.push([accumulate, result])
     else passes.push([accumulate, this.#accumulateTarget], [historyFix, result])
     return passes
   }
