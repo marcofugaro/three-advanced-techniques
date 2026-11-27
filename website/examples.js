@@ -96,7 +96,7 @@ export const EXAMPLE_CATEGORIES = [
         screenshot: 'rendering/screen-space-reflections/index.webp',
         technique: 'screen-space-reflections',
         description:
-          "Reflections found by Newton's method on the depth buffer, on a wet street at blue hour with a Ferrari 250 Testa Rossa at the curb.",
+          "Cheap reflections of what's on screen, found by Newton's method on the depth buffer instead of a ray march.",
       },
       {
         id: 'taau',
