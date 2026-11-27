@@ -36,9 +36,10 @@ Advanced three.js WebGPU techniques, written in TSL and shipped as plain ES modu
   `docs/BloomNode/`, members as fragments: `docs/BloomNode/#BloomNodeOptions.strength`), never hash routes, every URL
   relative. Not shipped. `website/examples.js` lists the demos by hand: add a new demo there too. `npm run docs`
   (`scripts/generate-docs.js`) generates `website/data/docs.json` from the main modules' `.d.ts` files and the READMEs,
-  and one page per route (`website/{examples,docs}/<id>/index.html`, copies of `website/index.html`): rerun it after
-  changing a `.d.ts`, a README, the demos, `website/index.html` or `website/quickstart.md` (the docs home's
-  quickstart), and never edit the generated files by hand.
+  and one page per route (`website/{examples,docs}/<id>/index.html`, copies of `website/index.html`). Those files are
+  gitignored and the deploy generates its own: run it once after cloning, rerun it after changing a `.d.ts`, a README,
+  the demos, `website/index.html` or `website/quickstart.md` (the docs home's quickstart) to see the change locally,
+  and never edit the generated files by hand.
 
 ## Conventions
 
@@ -67,6 +68,8 @@ Advanced three.js WebGPU techniques, written in TSL and shipped as plain ES modu
   `rendering/screen-space-reflections/index.html` (`setSampling`). The TAAU demo, whose subject is the upscaling,
   defaults to 2 instead and shows only a 'TAAU pixel ratio' slider (0.5–2).
 - `npm run dev` serves the repo root with `serve` on port 5174.
-- GitHub Pages hosts the repo root under the user `marcofugaro`, at
-  `https://marcofugaro.github.io/three-advanced-techniques/`: each demo runs at its path there
-  (`rendering/bloom/`, `examples/worm-monster.html`).
+- GitHub Pages hosts the site under the user `marcofugaro`, at `https://marcofugaro.github.io/three-advanced-techniques/`,
+  deployed by `.github/workflows/pages.yml` on every push to `main`: the website at the root (generated with
+  `npm run docs -- --repo-root=./`), and every other file of the repo at its own path beside it, so each demo runs at
+  its path there (`rendering/bloom/`, `examples/worm-monster.html`). A website file can't share a path with a repo
+  file: the deploy fails if one would.

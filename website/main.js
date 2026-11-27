@@ -34,7 +34,7 @@ document.querySelector('base')?.setAttribute('href', ROOT.href)
 
 // ---- Data ----
 
-const emptyDocs = { package: { name: NAME, version: '', repository: REPO }, gettingStarted: '', categories: [], techniques: {}, modules: {}, pages: {}, index: {} }
+const emptyDocs = { package: { name: NAME, version: '', repository: REPO }, repoRoot: '../', gettingStarted: '', categories: [], techniques: {}, modules: {}, pages: {}, index: {} }
 
 let docs = emptyDocs
 let docsError = null
@@ -64,7 +64,8 @@ const ctx = {
   exampleById,
   exampleByPage,
   repo: REPO,
-  rel: (repoPath) => '../' + repoPath,
+  // A repo file's URL: the repo's root is the site's parent in the repo, the site's own root once deployed
+  rel: (repoPath) => docs.repoRoot + repoPath,
   navigate: (href) => navigate(href),
 }
 
