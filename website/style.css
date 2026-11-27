@@ -560,6 +560,33 @@ kbd {
     font-size: 16px;
   }
 
+  /* Centered between the two buttons, which are the same width */
+  .mobile-bar .brand {
+    justify-content: center;
+  }
+
+  /* A larger A, hanging centered on the letters rather than standing on their baseline, so the bar, centering the A,
+     puts the letters on the icons' centerline */
+  .mobile-bar .brand-a {
+    --size: 2.08em;
+    width: var(--size);
+    height: var(--size);
+    vertical-align: calc(0.5cap - var(--size) / 2);
+    /* Its legs spread below the letters: the neighbors tuck in over them */
+    margin: 0 calc(var(--size) * -0.18) 0 calc(var(--size) * -0.21);
+  }
+
+  .mobile-bar .icon-btn {
+    width: 44px;
+    height: 44px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-bar .icon-btn svg {
+    width: 24px;
+    height: 24px;
+  }
+
   .app[data-view='viewer'] .mobile-bar {
     display: none;
   }
