@@ -13,7 +13,7 @@
           "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.tsl.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/",
           "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.21.0/dist/lil-gui.esm.js",
-          "stats-gl": "https://cdn.jsdelivr.net/npm/stats-gl@4.2.3/dist/main.js"
+          "stats-gl": "https://cdn.jsdelivr.net/npm/stats-gl@4.2.3/+esm"
         }
       }
     </script>
@@ -60,7 +60,6 @@
 
       const lab = await Lab.create({
         title: 'Noodles',
-        hint: 'Drag a noodle to pull it · R drops again',
         scale: LAB_SCALE,
       })
 

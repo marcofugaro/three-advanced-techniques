@@ -1,0 +1,423 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="300" viewBox="0 0 900 300" fill="none">
+  <!-- Type: Inter, Copyright 2016 The Inter Project Authors, SIL Open Font License 1.1, outlined. -->
+  <style>
+    .grid { animation: in 0.8s ease both; }
+    .word { animation: in 0.6s 0.1s ease both; }
+    .tag { animation: in 0.6s 0.9s ease both; }
+    .tile { fill: #ffd23f; fill-opacity: 0.16; stroke: #ffd23f; stroke-width: 1.5; stroke-linejoin: round;
+      animation: in 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+    .lit { fill: #fff; stroke: #fff; opacity: 0; }
+    .flash { fill: #ffd23f; opacity: 0; }
+    .lit, .flash { animation-duration: 5.711s; animation-timing-function: linear;
+      animation-iteration-count: infinite; }
+    @keyframes in { from { opacity: 0; } }
+    @keyframes c2 { 0%, 1.8% { opacity: 1; animation-timing-function: ease; } 17.5%, 100% { opacity: 0; } }
+.c2 { animation-name: c2; }
+@keyframes c1 { 0%, 0.9% { opacity: 1; animation-timing-function: ease; } 16.6%, 100% { opacity: 0; } }
+.c1 { animation-name: c1; }
+@keyframes c3 { 0%, 2.6% { opacity: 1; animation-timing-function: ease; } 18.4%, 100% { opacity: 0; } }
+.c3 { animation-name: c3; }
+@keyframes c0 { 0%, 0% { opacity: 1; animation-timing-function: ease; } 15.8%, 100% { opacity: 0; } }
+.c0 { animation-name: c0; }
+@keyframes c4 { 0%, 3.5% { opacity: 1; animation-timing-function: ease; } 19.3%, 100% { opacity: 0; } }
+.c4 { animation-name: c4; }
+@keyframes c5 { 0%, 4.4% { opacity: 1; animation-timing-function: ease; } 20.1%, 100% { opacity: 0; } }
+.c5 { animation-name: c5; }
+@keyframes t3 { 0%, 2.6% { opacity: 1; animation-timing-function: ease; } 14.9%, 100% { opacity: 0; } }
+.t3 { animation-name: t3; }
+@keyframes t4 { 0%, 3.5% { opacity: 1; animation-timing-function: ease; } 15.8%, 100% { opacity: 0; } }
+.t4 { animation-name: t4; }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+  </style>
+  <defs>
+    <clipPath id="panel"><rect width="900" height="300" rx="12" /></clipPath>
+    <radialGradient id="fade">
+      <stop offset="0.3" stop-color="#fff" />
+      <stop offset="1" stop-color="#fff" stop-opacity="0" />
+    </radialGradient>
+    <mask id="fade-mask"><rect width="900" height="300" fill="url(#fade)" /></mask>
+    <path id="g0" d="M655 1118V914H20V1118ZM179 1384H439V315Q439 254 465.0 225.5Q491 197 550 197Q568 197 597.5 201.5Q627 206 645 210L686 9Q643 -4 598.0 -9.5Q553 -15 512 -15Q351 -15 265.0 65.0Q179 145 179 293Z" />
+    <path id="g1" d="M398 655V0H138V1490H394V842H367Q414 987 505.0 1059.5Q596 1132 733 1132Q848 1132 934.5 1083.0Q1021 1034 1068.5 940.0Q1116 846 1116 711V0H855V671Q855 783 797.0 847.0Q739 911 637 911Q568 911 514.0 881.0Q460 851 429.0 793.5Q398 736 398 655Z" />
+    <path id="g2" d="M138 0V1118H390V931H402Q432 1028 507.0 1080.5Q582 1133 678 1133Q700 1133 727.0 1131.0Q754 1129 773 1126V887Q757 892 721.0 896.0Q685 900 650 900Q578 900 520.5 869.0Q463 838 430.5 783.5Q398 729 398 658V0Z" />
+    <path id="g3" d="M632 -23Q463 -23 341.5 48.0Q220 119 154.5 248.0Q89 377 89 552Q89 725 153.5 855.0Q218 985 336.5 1058.5Q455 1132 615 1132Q717 1132 809.5 1099.0Q902 1066 973.5 997.0Q1045 928 1085.5 821.5Q1126 715 1126 568V486H212V663H997L875 611Q875 705 846.0 776.5Q817 848 759.5 888.0Q702 928 616 928Q530 928 470.0 887.5Q410 847 378.5 779.5Q347 712 347 629V507Q347 401 383.0 328.0Q419 255 484.0 218.0Q549 181 635 181Q692 181 738.5 197.5Q785 214 819.0 246.5Q853 279 870 326L1109 277Q1082 187 1017.0 119.5Q952 52 854.5 14.5Q757 -23 632 -23Z" />
+    <path id="g4" d="M811 728V513H141V728Z" />
+    <path id="g5" d="M550 -20Q418 -20 313.5 47.5Q209 115 149.0 244.0Q89 373 89 557Q89 743 150.5 871.5Q212 1000 316.5 1066.0Q421 1132 549 1132Q649 1132 712.5 1098.5Q776 1065 813.5 1019.0Q851 973 870 933H881V1490H1141V0H886V177H870Q850 137 811.5 91.0Q773 45 710.0 12.5Q647 -20 550 -20ZM621 194Q706 194 765.0 239.5Q824 285 855.0 367.0Q886 449 886 558Q886 667 855.5 747.5Q825 828 765.5 873.0Q706 918 621 918Q533 918 474.0 871.5Q415 825 385.0 743.5Q355 662 355 558Q355 454 385.0 371.5Q415 289 474.5 241.5Q534 194 621 194Z" />
+    <path id="g6" d="M455 0 39 1118H317L521 510Q557 403 583.0 295.0Q609 187 636 76H571Q599 187 624.5 295.0Q650 403 685 510L888 1118H1164L746 0Z" />
+    <path id="g7" d="M450 -23Q344 -23 259.0 15.5Q174 54 125.0 129.0Q76 204 76 314Q76 409 111.5 471.0Q147 533 207.5 570.0Q268 607 344.0 626.0Q420 645 502 653Q599 664 660.0 672.0Q721 680 749.5 698.0Q778 716 778 754V759Q778 814 756.0 852.5Q734 891 690.5 911.5Q647 932 583 932Q518 932 470.5 912.0Q423 892 393.0 860.0Q363 828 349 791L108 840Q141 939 210.0 1003.5Q279 1068 374.5 1100.0Q470 1132 582 1132Q661 1132 741.5 1113.5Q822 1095 889.0 1051.0Q956 1007 997.0 933.0Q1038 859 1038 747V0H789V154H779Q754 107 710.5 66.5Q667 26 602.5 1.5Q538 -23 450 -23ZM517 170Q598 170 656.5 202.0Q715 234 747.5 286.5Q780 339 780 401V533Q767 523 736.5 514.0Q706 505 668.5 498.0Q631 491 594.5 486.0Q558 481 533 478Q475 470 428.0 452.0Q381 434 354.5 401.5Q328 369 328 317Q328 269 352.5 236.5Q377 204 419.5 187.0Q462 170 517 170Z" />
+    <path id="g8" d="M398 655V0H138V1118H384L388 842H367Q414 987 505.0 1059.5Q596 1132 733 1132Q848 1132 934.0 1083.0Q1020 1034 1067.5 940.0Q1115 846 1115 711V0H855V671Q855 783 797.0 847.0Q739 911 637 911Q568 911 514.0 881.0Q460 851 429.0 793.5Q398 736 398 655Z" />
+    <path id="g9" d="M623 -23Q460 -23 340.0 49.5Q220 122 154.5 251.5Q89 381 89 553Q89 727 154.5 857.5Q220 988 340.0 1060.0Q460 1132 623 1132Q716 1132 796.0 1108.0Q876 1084 939.0 1038.5Q1002 993 1044.5 928.0Q1087 863 1105 781L862 730Q851 773 830.5 808.5Q810 844 780.0 869.0Q750 894 711.0 907.5Q672 921 625 921Q534 921 474.0 872.5Q414 824 384.0 741.5Q354 659 354 554Q354 451 384.0 368.0Q414 285 474.0 236.5Q534 188 625 188Q673 188 712.5 202.0Q752 216 782.5 242.0Q813 268 834.0 305.0Q855 342 865 387L1108 336Q1090 252 1047.5 186.0Q1005 120 941.5 73.5Q878 27 797.5 2.0Q717 -23 623 -23Z" />
+    <path id="g10" d="M138 0V1118H398V0ZM268 1276Q206 1276 161.5 1318.0Q117 1360 117 1418Q117 1478 161.5 1519.5Q206 1561 268 1561Q331 1561 375.5 1519.5Q420 1478 420 1419Q420 1360 375.5 1318.0Q331 1276 268 1276Z" />
+    <path id="g11" d="M1141 -418H881V177H870Q850 137 811.5 91.0Q773 45 710.0 12.5Q647 -20 550 -20Q418 -20 313.5 47.5Q209 115 149.0 244.0Q89 373 89 557Q89 743 150.5 871.5Q212 1000 316.5 1066.0Q421 1132 549 1132Q649 1132 712.5 1098.5Q776 1065 813.5 1019.0Q851 973 870 933H886V1118H1141ZM621 194Q706 194 765.0 239.5Q824 285 855.0 367.0Q886 449 886 558Q886 667 855.5 747.5Q825 828 765.5 873.0Q706 918 621 918Q533 918 474.0 871.5Q415 825 385.0 743.5Q355 662 355 558Q355 454 385.0 371.5Q415 289 474.5 241.5Q534 194 621 194Z" />
+    <path id="g12" d="M521 -14Q406 -14 319.5 35.0Q233 84 185.5 178.5Q138 273 138 407V1118H398V447Q398 335 456.5 271.0Q515 207 617 207Q686 207 740.0 237.0Q794 267 824.5 325.0Q855 383 855 463V1118H1116V0H869L866 276H886Q839 130 747.0 58.0Q655 -14 521 -14Z" />
+    <path id="g13" d="M561 -23Q432 -23 333.0 14.0Q234 51 170.5 122.0Q107 193 88 294L331 340Q354 257 412.5 216.5Q471 176 566 176Q662 176 718.5 214.5Q775 253 775 310Q775 358 738.0 389.5Q701 421 624 438L433 479Q275 513 197.0 591.0Q119 669 119 792Q119 896 176.0 972.0Q233 1048 334.5 1090.0Q436 1132 570 1132Q697 1132 788.5 1096.0Q880 1060 936.5 995.5Q993 931 1015 844L783 798Q764 857 714.0 897.5Q664 938 573 938Q490 938 434.5 901.5Q379 865 379 808Q379 759 416.0 727.0Q453 695 538 677L728 637Q887 603 964.0 528.0Q1041 453 1041 335Q1041 229 980.0 148.5Q919 68 810.5 22.5Q702 -23 561 -23Z" />
+    <path id="g14" d="M180 0V1490H690Q864 1490 976.5 1426.5Q1089 1363 1143.5 1256.0Q1198 1149 1198 1016Q1198 883 1143.5 775.0Q1089 667 977.0 603.0Q865 539 691 539H330V706H682Q800 706 872.0 746.5Q944 787 976.5 857.5Q1009 928 1009 1016Q1009 1104 976.5 1173.5Q944 1243 871.5 1283.0Q799 1323 680 1323H370V0Z" />
+    <path id="g15" d="M158 0V1118H332V946H344Q375 1031 454.5 1082.5Q534 1134 634 1134Q654 1134 681.5 1133.0Q709 1132 725 1131V950Q717 952 685.0 956.0Q653 960 617 960Q537 960 473.5 926.5Q410 893 374.0 834.5Q338 776 338 700V0Z" />
+    <path id="g16" d="M613 -24Q461 -24 346.5 48.0Q232 120 168.0 250.0Q104 380 104 552Q104 727 168.0 857.5Q232 988 346.5 1060.0Q461 1132 613 1132Q766 1132 881.0 1060.0Q996 988 1060.0 857.5Q1124 727 1124 552Q1124 380 1060.0 250.0Q996 120 881.0 48.0Q766 -24 613 -24ZM613 137Q726 137 799.0 195.0Q872 253 907.0 347.5Q942 442 942 552Q942 663 907.0 758.5Q872 854 799.0 912.5Q726 971 613 971Q501 971 429.0 912.5Q357 854 322.0 759.0Q287 664 287 552Q287 442 322.0 347.5Q357 253 429.0 195.0Q501 137 613 137Z" />
+    <path id="g17" d="M577 -24Q438 -24 331.0 47.0Q224 118 164.0 248.0Q104 378 104 556Q104 733 164.5 862.5Q225 992 332.0 1062.0Q439 1132 578 1132Q687 1132 751.0 1096.0Q815 1060 849.5 1014.5Q884 969 902 939H916V1490H1096V0H922V173H902Q884 142 848.5 95.5Q813 49 748.5 12.5Q684 -24 577 -24ZM604 137Q706 137 776.0 190.5Q846 244 882.0 339.0Q918 434 918 558Q918 682 882.5 774.5Q847 867 777.0 919.0Q707 971 604 971Q498 971 427.5 916.0Q357 861 322.0 767.5Q287 674 287 558Q287 441 322.5 345.5Q358 250 429.0 193.5Q500 137 604 137Z" />
+    <path id="g18" d="M537 -14Q424 -14 338.5 32.5Q253 79 205.5 173.0Q158 267 158 408V1118H338V423Q338 294 406.0 221.0Q474 148 591 148Q671 148 734.5 183.0Q798 218 835.0 285.5Q872 353 872 448V1118H1053V0H879V271H903Q851 114 755.5 50.0Q660 -14 537 -14Z" />
+    <path id="g19" d="M613 -24Q461 -24 346.5 48.0Q232 120 168.0 250.0Q104 380 104 552Q104 727 168.0 857.5Q232 988 346.5 1060.0Q461 1132 613 1132Q694 1132 766.0 1111.0Q838 1090 897.5 1050.5Q957 1011 1000.0 953.5Q1043 896 1066 823L893 774Q881 817 856.0 853.0Q831 889 795.5 915.5Q760 942 714.0 956.5Q668 971 613 971Q501 971 429.0 912.5Q357 854 322.0 759.0Q287 664 287 552Q287 442 322.0 347.5Q357 253 429.0 195.0Q501 137 613 137Q669 137 716.0 152.0Q763 167 799.5 194.5Q836 222 861.0 260.0Q886 298 898 343L1070 294Q1048 219 1004.5 160.5Q961 102 901.0 60.5Q841 19 768.0 -2.5Q695 -24 613 -24Z" />
+    <path id="g20" d="M598 1118V964H20V1118ZM188 1384H368V290Q368 215 398.5 180.5Q429 146 500 146Q517 146 543.5 150.0Q570 154 592 158L629 6Q601 -4 565.5 -9.0Q530 -14 495 -14Q350 -14 269.0 62.5Q188 139 188 276Z" />
+    <path id="g21" d="M158 0V1118H338V0ZM249 1301Q198 1301 161.0 1336.0Q124 1371 124 1420Q124 1470 161.0 1504.5Q198 1539 249 1539Q301 1539 338.0 1504.5Q375 1470 375 1420Q375 1371 338.0 1336.0Q301 1301 249 1301Z" />
+    <path id="g22" d="M338 670V0H158V1118H331L332 847H307Q358 1002 452.5 1067.0Q547 1132 674 1132Q787 1132 872.0 1085.5Q957 1039 1004.5 945.5Q1052 852 1052 710V0H872V695Q872 824 804.5 897.0Q737 970 620 970Q540 970 476.0 935.0Q412 900 375.0 833.0Q338 766 338 670Z" />
+    <path id="g23" d="M798 719V553H144V719Z" />
+    <path id="g24" d="M628 -24Q466 -24 348.5 48.0Q231 120 167.5 249.0Q104 378 104 550Q104 722 166.0 853.0Q228 984 341.5 1058.0Q455 1132 607 1132Q696 1132 782.5 1102.5Q869 1073 939.5 1007.5Q1010 942 1052.0 835.0Q1094 728 1094 573V498H226V650H997L913 594Q913 704 878.5 789.5Q844 875 776.0 923.5Q708 972 607 972Q506 972 434.0 922.5Q362 873 324.0 793.5Q286 714 286 623V522Q286 398 329.0 311.5Q372 225 449.5 180.5Q527 136 629 136Q695 136 749.0 155.0Q803 174 842.0 212.5Q881 251 902 308L1076 260Q1050 176 988.0 112.0Q926 48 834.5 12.0Q743 -24 628 -24Z" />
+    <path id="g25" d="M471 -26Q365 -26 278.5 14.0Q192 54 141.0 131.0Q90 208 90 318Q90 414 128.0 474.0Q166 534 229.5 568.5Q293 603 370.0 620.0Q447 637 525 647Q625 660 688.0 667.0Q751 674 781.5 691.0Q812 708 812 749V755Q812 825 786.0 873.5Q760 922 708.0 948.0Q656 974 578 974Q498 974 441.0 949.0Q384 924 348.5 886.5Q313 849 295 810L122 867Q165 969 238.0 1026.5Q311 1084 399.0 1108.0Q487 1132 573 1132Q629 1132 700.5 1118.5Q772 1105 838.5 1065.0Q905 1025 948.5 946.5Q992 868 992 737V0H815V152H803Q784 113 742.0 71.5Q700 30 633.0 2.0Q566 -26 471 -26ZM502 133Q602 133 671.0 172.0Q740 211 776.0 273.5Q812 336 812 404V559Q801 546 764.0 535.5Q727 525 679.5 517.0Q632 509 587.5 503.5Q543 498 517 495Q452 487 395.5 467.5Q339 448 305.0 410.5Q271 373 271 309Q271 251 301.0 212.0Q331 173 383.0 153.0Q435 133 502 133Z" />
+    <path id="g26" d="M140 -405 186 -249 205 -254Q260 -268 305.0 -261.5Q350 -255 386.0 -217.0Q422 -179 449 -99L481 -6L54 1118H251L489 455Q527 351 553.0 249.0Q579 147 608 51H542Q571 147 597.5 249.5Q624 352 661 455L901 1118H1097L606 -167Q572 -256 524.5 -313.5Q477 -371 414.0 -398.5Q351 -426 272 -426Q224 -426 189.0 -419.0Q154 -412 140 -405Z" />
+    <path id="g27" d="M481 0 54 1118H251L489 455Q527 352 553.5 249.5Q580 147 609 51H543Q572 147 598.5 249.5Q625 352 662 455L900 1118H1097L670 0Z" />
+    <path id="g28" d="M338 670V0H158V1490H338V847H307Q358 1002 452.5 1067.0Q547 1132 674 1132Q787 1132 872.5 1085.5Q958 1039 1005.5 945.5Q1053 852 1053 710V0H872V695Q872 824 804.5 897.0Q737 970 620 970Q540 970 476.0 935.0Q412 900 375.0 833.0Q338 766 338 670Z" />
+    <path id="g29" d="M1096 -418H916V173H902Q884 142 848.5 95.5Q813 49 748.5 12.5Q684 -24 577 -24Q438 -24 331.0 47.0Q224 118 164.0 248.0Q104 378 104 556Q104 733 164.5 862.5Q225 992 332.0 1062.0Q439 1132 578 1132Q687 1132 751.0 1096.0Q815 1060 849.5 1014.5Q884 969 902 939H922V1118H1096ZM604 137Q706 137 776.0 190.5Q846 244 882.0 339.0Q918 434 918 558Q918 682 882.5 774.5Q847 867 777.0 919.0Q707 971 604 971Q498 971 427.5 916.0Q357 861 322.0 767.5Q287 674 287 558Q287 441 322.5 345.5Q358 250 429.0 193.5Q500 137 604 137Z" />
+    <path id="g30" d="M538 -24Q423 -24 333.5 9.5Q244 43 186.0 109.0Q128 175 108 271L279 312Q303 220 369.5 177.0Q436 134 536 134Q653 134 722.5 184.0Q792 234 792 303Q792 361 751.5 399.5Q711 438 628 457L442 501Q290 537 216.0 612.5Q142 688 142 806Q142 902 196.0 975.5Q250 1049 343.5 1090.5Q437 1132 556 1132Q671 1132 751.5 1097.5Q832 1063 882.5 1002.5Q933 942 958 863L795 821Q772 881 718.5 930.0Q665 979 557 979Q457 979 390.5 933.0Q324 887 324 817Q324 755 369.0 717.5Q414 680 512 657L681 617Q833 581 906.0 505.5Q979 430 979 315Q979 217 923.5 140.5Q868 64 768.5 20.0Q669 -24 538 -24Z" />
+    <path id="g31" d="M678 1118V964H20V1118ZM240 0V1267Q240 1364 285.5 1429.0Q331 1494 404.0 1527.0Q477 1560 558 1560Q622 1560 664.0 1549.5Q706 1539 726 1530L676 1376Q662 1381 639.5 1387.0Q617 1393 579 1393Q496 1393 458.0 1350.5Q420 1308 420 1227V0Z" />
+    <path id="g32" d="M295 -13Q239 -13 199.5 26.5Q160 66 160 122Q160 178 199.5 217.5Q239 257 295 257Q351 257 390.5 217.5Q430 178 430 122Q430 66 390.5 26.5Q351 -13 295 -13Z" />
+    <path id="g33" d="M157 1118H338V-80Q339 -186 302.0 -262.0Q265 -338 192.0 -378.0Q119 -418 10 -418H-26V-252H7Q85 -252 121.0 -207.5Q157 -163 157 -80ZM248 1301Q197 1301 160.0 1336.0Q123 1371 123 1420Q123 1470 160.0 1504.5Q197 1539 248 1539Q300 1539 337.0 1504.5Q374 1470 374 1420Q374 1371 337.0 1336.0Q300 1301 248 1301Z" />
+    <path id="g34" d="M128 -359 216 208H422L266 -359Z" />
+    <path id="g35" d="M158 0V1118H333L334 868H320Q343 959 392.5 1018.5Q442 1078 508.5 1108.0Q575 1138 647 1138Q769 1138 844.5 1063.0Q920 988 942 866H918Q938 950 991.0 1011.0Q1044 1072 1119.5 1105.0Q1195 1138 1284 1138Q1381 1138 1461.0 1096.0Q1541 1054 1588.5 969.0Q1636 884 1636 754V0H1456V749Q1456 870 1388.0 922.0Q1320 974 1230 974Q1155 974 1100.5 942.5Q1046 911 1016.5 856.0Q987 801 987 730V0H807V767Q807 860 745.0 917.0Q683 974 588 974Q523 974 465.5 943.5Q408 913 373.0 853.0Q338 793 338 704V0Z" />
+    <path id="g36" d="M98 1322V1490H1224V1322H757V0H567V1322Z" />
+    <path id="g37" d="M657 -26Q496 -26 377.5 26.0Q259 78 192.0 171.5Q125 265 116 390H311Q319 306 368.0 251.5Q417 197 493.5 170.5Q570 144 657 144Q758 144 838.5 177.0Q919 210 966.0 270.0Q1013 330 1013 409Q1013 481 972.5 526.0Q932 571 865.0 600.0Q798 629 718 651L538 702Q358 753 258.0 848.0Q158 943 158 1091Q158 1217 226.0 1311.5Q294 1406 410.0 1458.0Q526 1510 670 1510Q817 1510 930.0 1458.0Q1043 1406 1108.5 1316.5Q1174 1227 1178 1114H992Q979 1223 888.0 1282.5Q797 1342 664 1342Q568 1342 495.5 1310.5Q423 1279 383.0 1224.5Q343 1170 343 1100Q343 1022 391.5 974.5Q440 927 506.5 900.5Q573 874 627 859L776 818Q836 802 908.5 774.0Q981 746 1047.0 699.5Q1113 653 1155.5 581.5Q1198 510 1198 406Q1198 284 1134.5 186.0Q1071 88 950.0 31.0Q829 -26 657 -26Z" />
+    <path id="g38" d="M180 0V1490H370V168H1060V0Z" />
+    <path id="g39" d="M458 0 52 1490H246L482 576Q501 503 518.0 427.5Q535 352 551.0 274.5Q567 197 581 115H558Q573 197 589.0 274.5Q605 352 623.0 427.5Q641 503 660 576L901 1490H1117L1356 576Q1376 503 1393.5 427.5Q1411 352 1428.0 274.5Q1445 197 1460 115H1434Q1449 197 1465.0 274.5Q1481 352 1499.0 427.5Q1517 503 1535 576L1770 1490H1966L1558 0H1337L1081 944Q1056 1036 1033.0 1144.5Q1010 1253 988 1395H1028Q1006 1261 985.0 1155.5Q964 1050 935 944L680 0Z" />
+    <path id="g40" d="M677 -24Q571 -24 506.0 12.5Q441 49 406.0 95.5Q371 142 352 173H332V0H158V1490H338V939H352Q371 969 405.0 1014.5Q439 1060 503.0 1096.0Q567 1132 676 1132Q816 1132 922.5 1062.0Q1029 992 1089.5 862.5Q1150 733 1150 556Q1150 378 1090.0 248.0Q1030 118 923.5 47.0Q817 -24 677 -24ZM650 137Q755 137 825.5 193.5Q896 250 931.5 345.5Q967 441 967 558Q967 674 932.0 767.5Q897 861 826.5 916.0Q756 971 650 971Q547 971 477.0 919.0Q407 867 371.5 774.5Q336 682 336 558Q336 434 372.0 339.0Q408 244 478.5 190.5Q549 137 650 137Z" />
+    <path id="g41" d="M789 -20Q590 -20 440.0 73.0Q290 166 206.0 337.5Q122 509 122 744Q122 981 206.0 1152.5Q290 1324 438.0 1417.0Q586 1510 777 1510Q895 1510 997.5 1475.0Q1100 1440 1181.0 1375.0Q1262 1310 1315.5 1220.5Q1369 1131 1389 1023H1193Q1170 1095 1132.0 1152.0Q1094 1209 1041.5 1250.0Q989 1291 923.0 1312.5Q857 1334 778 1334Q647 1334 540.0 1266.5Q433 1199 370.0 1067.5Q307 936 307 744Q307 554 370.5 423.0Q434 292 543.0 224.0Q652 156 789 156Q915 156 1011.0 209.5Q1107 263 1160.5 361.5Q1214 460 1214 594L1271 583H828V749H1400V586Q1400 401 1321.0 265.0Q1242 129 1104.5 54.5Q967 -20 789 -20Z" />
+    <path id="g42" d="M763 -24Q587 -24 455.5 45.0Q324 114 252.0 234.0Q180 354 180 507V1490H370V522Q370 415 417.5 331.5Q465 248 553.0 200.0Q641 152 763 152Q885 152 972.5 200.0Q1060 248 1107.0 331.5Q1154 415 1154 522V1490H1344V507Q1344 354 1272.0 234.0Q1200 114 1069.5 45.0Q939 -24 763 -24Z" />
+  </defs>
+  <g clip-path="url(#panel)">
+    <rect width="900" height="300" fill="#0a0a0a" />
+    <g mask="url(#fade-mask)">
+      <path class="grid" d="M0 -30.5H900M0 -12.4H900M0 5.6H900M0 23.6H900M0 41.7H900M0 59.7H900M0 77.8H900M0 95.8H900M0 113.9H900M0 131.9H900M0 149.9H900M0 168H900M0 186H900M0 204.1H900M0 222.1H900M0 240.2H900M0 258.2H900M0 276.2H900M0 294.3H900M0 312.3H900M0 330.4H900M-228.6 -30.5L-20.3 330.4M-207.8 -30.5L0.5 330.4M-187 -30.5L21.4 330.4M-166.1 -30.5L42.2 330.4M-20.3 -30.5L-228.6 330.4M-145.3 -30.5L63 330.4M0.5 -30.5L-207.8 330.4M-124.5 -30.5L83.9 330.4M21.4 -30.5L-187 330.4M-103.6 -30.5L104.7 330.4M42.2 -30.5L-166.1 330.4M-82.8 -30.5L125.5 330.4M63 -30.5L-145.3 330.4M-62 -30.5L146.4 330.4M83.9 -30.5L-124.5 330.4M-41.1 -30.5L167.2 330.4M104.7 -30.5L-103.6 330.4M-20.3 -30.5L188 330.4M125.5 -30.5L-82.8 330.4M0.5 -30.5L208.9 330.4M146.4 -30.5L-62 330.4M21.4 -30.5L229.7 330.4M167.2 -30.5L-41.1 330.4M42.2 -30.5L250.5 330.4M188 -30.5L-20.3 330.4M63 -30.5L271.4 330.4M208.9 -30.5L0.5 330.4M83.9 -30.5L292.2 330.4M229.7 -30.5L21.4 330.4M104.7 -30.5L313 330.4M250.5 -30.5L42.2 330.4M125.5 -30.5L333.9 330.4M271.4 -30.5L63 330.4M146.4 -30.5L354.7 330.4M292.2 -30.5L83.9 330.4M167.2 -30.5L375.5 330.4M313 -30.5L104.7 330.4M188 -30.5L396.4 330.4M333.9 -30.5L125.5 330.4M208.9 -30.5L417.2 330.4M354.7 -30.5L146.4 330.4M229.7 -30.5L438 330.4M375.5 -30.5L167.2 330.4M250.5 -30.5L458.9 330.4M396.4 -30.5L188 330.4M271.4 -30.5L479.7 330.4M417.2 -30.5L208.9 330.4M292.2 -30.5L500.5 330.4M438 -30.5L229.7 330.4M313 -30.5L521.4 330.4M458.9 -30.5L250.5 330.4M333.9 -30.5L542.2 330.4M479.7 -30.5L271.4 330.4M354.7 -30.5L563 330.4M500.5 -30.5L292.2 330.4M375.5 -30.5L583.9 330.4M521.4 -30.5L313 330.4M396.4 -30.5L604.7 330.4M542.2 -30.5L333.9 330.4M417.2 -30.5L625.5 330.4M563 -30.5L354.7 330.4M438 -30.5L646.4 330.4M583.9 -30.5L375.5 330.4M458.9 -30.5L667.2 330.4M604.7 -30.5L396.4 330.4M479.7 -30.5L688 330.4M625.5 -30.5L417.2 330.4M500.5 -30.5L708.9 330.4M646.4 -30.5L438 330.4M521.4 -30.5L729.7 330.4M667.2 -30.5L458.9 330.4M542.2 -30.5L750.5 330.4M688 -30.5L479.7 330.4M563 -30.5L771.4 330.4M708.9 -30.5L500.5 330.4M583.9 -30.5L792.2 330.4M729.7 -30.5L521.4 330.4M604.7 -30.5L813 330.4M750.5 -30.5L542.2 330.4M625.5 -30.5L833.9 330.4M771.4 -30.5L563 330.4M646.4 -30.5L854.7 330.4M792.2 -30.5L583.9 330.4M667.2 -30.5L875.5 330.4M813 -30.5L604.7 330.4M688 -30.5L896.4 330.4M833.9 -30.5L625.5 330.4M708.9 -30.5L917.2 330.4M854.7 -30.5L646.4 330.4M729.7 -30.5L938 330.4M875.5 -30.5L667.2 330.4M750.5 -30.5L958.9 330.4M896.4 -30.5L688 330.4M771.4 -30.5L979.7 330.4M917.2 -30.5L708.9 330.4M792.2 -30.5L1000.5 330.4M938 -30.5L729.7 330.4M813 -30.5L1021.4 330.4M958.9 -30.5L750.5 330.4M833.9 -30.5L1042.2 330.4M979.7 -30.5L771.4 330.4M854.7 -30.5L1063 330.4M1000.5 -30.5L792.2 330.4M875.5 -30.5L1083.9 330.4M1021.4 -30.5L813 330.4M896.4 -30.5L1104.7 330.4M1042.2 -30.5L833.9 330.4M917.2 -30.5L1125.5 330.4M1063 -30.5L854.7 330.4M1083.9 -30.5L875.5 330.4M1104.7 -30.5L896.4 330.4M1125.5 -30.5L917.2 330.4" stroke="#fff" stroke-opacity="0.1" />
+      <g>
+        <path class="lit c2" d="M396.4 41.7 406.8 59.7 386 59.7z" fill-opacity="0.023" stroke-opacity="0.099" style="animation-delay: 3.32s" />
+        <path class="lit c2" d="M417.2 41.7 427.6 59.7 406.8 59.7z" fill-opacity="0.033" stroke-opacity="0.141" style="animation-delay: 3.38s" />
+        <path class="lit c2" d="M438 41.7 448.5 59.7 427.6 59.7z" fill-opacity="0.032" stroke-opacity="0.136" style="animation-delay: 3.44s" />
+        <path class="lit c1" d="M458.9 41.7 469.3 59.7 448.5 59.7z" fill-opacity="0.023" stroke-opacity="0.096" style="animation-delay: 3.52s" />
+        <path class="lit c2" d="M344.3 59.7 354.7 77.8 333.9 77.8z" fill-opacity="0.036" stroke-opacity="0.153" style="animation-delay: 3.13s" />
+        <path class="lit c2" d="M344.3 59.7 365.1 59.7 354.7 77.8z" fill-opacity="0.027" stroke-opacity="0.114" style="animation-delay: 3.18s" />
+        <path class="lit c3" d="M365.1 59.7 375.5 77.8 354.7 77.8z" fill-opacity="0.066" stroke-opacity="0.278" style="animation-delay: 3.17s" />
+        <path class="lit c3" d="M365.1 59.7 386 59.7 375.5 77.8z" fill-opacity="0.054" stroke-opacity="0.228" style="animation-delay: 3.22s" />
+        <path class="lit c3" d="M386 59.7 396.4 77.8 375.5 77.8z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.23s" />
+        <path class="lit c3" d="M386 59.7 406.8 59.7 396.4 77.8z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.28s" />
+        <path class="lit c3" d="M406.8 59.7 417.2 77.8 396.4 77.8z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.30s" />
+        <path class="lit c3" d="M406.8 59.7 427.6 59.7 417.2 77.8z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.34s" />
+        <path class="lit c3" d="M427.6 59.7 438 77.8 417.2 77.8z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.37s" />
+        <path class="lit c3" d="M427.6 59.7 448.5 59.7 438 77.8z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.41s" />
+        <path class="lit c3" d="M448.5 59.7 458.9 77.8 438 77.8z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.44s" />
+        <path class="lit c3" d="M448.5 59.7 469.3 59.7 458.9 77.8z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.48s" />
+        <path class="lit c3" d="M469.3 59.7 479.7 77.8 458.9 77.8z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.51s" />
+        <path class="lit c3" d="M469.3 59.7 490.1 59.7 479.7 77.8z" fill-opacity="0.057" stroke-opacity="0.241" style="animation-delay: 3.55s" />
+        <path class="lit c3" d="M490.1 59.7 500.5 77.8 479.7 77.8z" fill-opacity="0.072" stroke-opacity="0.302" style="animation-delay: 3.59s" />
+        <path class="lit c2" d="M490.1 59.7 511 59.7 500.5 77.8z" fill-opacity="0.034" stroke-opacity="0.145" style="animation-delay: 3.64s" />
+        <path class="lit c2" d="M511 59.7 521.4 77.8 500.5 77.8z" fill-opacity="0.046" stroke-opacity="0.192" style="animation-delay: 3.67s" />
+        <path class="lit c1" d="M531.8 59.7 542.2 77.8 521.4 77.8z" fill-opacity="0.014" stroke-opacity="0.060" style="animation-delay: 3.77s" />
+        <path class="lit c1" d="M292.2 77.8 302.6 95.8 281.8 95.8z" fill-opacity="0.016" stroke-opacity="0.068" style="animation-delay: 2.97s" />
+        <path class="lit c1" d="M292.2 77.8 313 77.8 302.6 95.8z" fill-opacity="0.014" stroke-opacity="0.061" style="animation-delay: 3.02s" />
+        <path class="lit c3" d="M313 77.8 323.5 95.8 302.6 95.8z" fill-opacity="0.057" stroke-opacity="0.239" style="animation-delay: 2.99s" />
+        <path class="lit c3" d="M313 77.8 333.9 77.8 323.5 95.8z" fill-opacity="0.051" stroke-opacity="0.214" style="animation-delay: 3.03s" />
+        <path class="lit c3" d="M333.9 77.8 344.3 95.8 323.5 95.8z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.04s" />
+        <path class="lit c3" d="M333.9 77.8 354.7 77.8 344.3 95.8z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.09s" />
+        <path class="lit c3" d="M354.7 77.8 365.1 95.8 344.3 95.8z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.11s" />
+        <path class="lit c3" d="M354.7 77.8 375.5 77.8 365.1 95.8z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.15s" />
+        <path class="lit c3" d="M375.5 77.8 386 95.8 365.1 95.8z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.18s" />
+        <path class="lit c3" d="M375.5 77.8 396.4 77.8 386 95.8z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.22s" />
+        <path class="lit c3" d="M396.4 77.8 406.8 95.8 386 95.8z" fill-opacity="0.066" stroke-opacity="0.281" style="animation-delay: 3.26s" />
+        <path class="lit c3" d="M396.4 77.8 417.2 77.8 406.8 95.8z" fill-opacity="0.084" stroke-opacity="0.356" style="animation-delay: 3.30s" />
+        <path class="lit c3" d="M417.2 77.8 427.6 95.8 406.8 95.8z" fill-opacity="0.054" stroke-opacity="0.227" style="animation-delay: 3.34s" />
+        <path class="lit c3" d="M417.2 77.8 438 77.8 427.6 95.8z" fill-opacity="0.079" stroke-opacity="0.334" style="animation-delay: 3.37s" />
+        <path class="lit c3" d="M438 77.8 448.5 95.8 427.6 95.8z" fill-opacity="0.055" stroke-opacity="0.233" style="animation-delay: 3.42s" />
+        <path class="lit c3" d="M438 77.8 458.9 77.8 448.5 95.8z" fill-opacity="0.086" stroke-opacity="0.361" style="animation-delay: 3.45s" />
+        <path class="lit c3" d="M458.9 77.8 469.3 95.8 448.5 95.8z" fill-opacity="0.066" stroke-opacity="0.280" style="animation-delay: 3.49s" />
+        <path class="lit c3" d="M458.9 77.8 479.7 77.8 469.3 95.8z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.52s" />
+        <path class="lit c3" d="M479.7 77.8 490.1 95.8 469.3 95.8z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.56s" />
+        <path class="lit c3" d="M479.7 77.8 500.5 77.8 490.1 95.8z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.59s" />
+        <path class="lit c3" d="M500.5 77.8 511 95.8 490.1 95.8z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.63s" />
+        <path class="lit c3" d="M500.5 77.8 521.4 77.8 511 95.8z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.66s" />
+        <path class="lit c3" d="M521.4 77.8 531.8 95.8 511 95.8z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.70s" />
+        <path class="lit c3" d="M521.4 77.8 542.2 77.8 531.8 95.8z" fill-opacity="0.062" stroke-opacity="0.262" style="animation-delay: 3.73s" />
+        <path class="lit c3" d="M542.2 77.8 552.6 95.8 531.8 95.8z" fill-opacity="0.067" stroke-opacity="0.281" style="animation-delay: 3.77s" />
+        <path class="lit c1" d="M542.2 77.8 563 77.8 552.6 95.8z" fill-opacity="0.022" stroke-opacity="0.093" style="animation-delay: 3.83s" />
+        <path class="lit c1" d="M563 77.8 573.5 95.8 552.6 95.8z" fill-opacity="0.020" stroke-opacity="0.084" style="animation-delay: 3.87s" />
+        <path class="lit c0" d="M917.2 77.8 927.6 95.8 906.8 95.8z" fill-opacity="0.013" stroke-opacity="0.056" style="animation-delay: 5.39s" />
+        <path class="lit c1" d="M917.2 77.8 938 77.8 927.6 95.8z" fill-opacity="0.025" stroke-opacity="0.106" style="animation-delay: 5.40s" />
+        <path class="lit c1" d="M938 77.8 948.5 95.8 927.6 95.8z" fill-opacity="0.074" stroke-opacity="0.313" style="animation-delay: 5.39s" />
+        <path class="lit c1" d="M938 77.8 958.9 77.8 948.5 95.8z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 5.40s" />
+        <path class="lit c4" d="M281.8 95.8 292.2 113.9 271.4 113.9z" fill-opacity="0.054" stroke-opacity="0.226" style="animation-delay: 2.83s" />
+        <path class="lit c3" d="M281.8 95.8 302.6 95.8 292.2 113.9z" fill-opacity="0.060" stroke-opacity="0.253" style="animation-delay: 2.89s" />
+        <path class="lit c4" d="M302.6 95.8 313 113.9 292.2 113.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.89s" />
+        <path class="lit c4" d="M302.6 95.8 323.5 95.8 313 113.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.94s" />
+        <path class="lit c4" d="M323.5 95.8 333.9 113.9 313 113.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.97s" />
+        <path class="lit c4" d="M323.5 95.8 344.3 95.8 333.9 113.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.02s" />
+        <path class="lit c3" d="M344.3 95.8 354.7 113.9 333.9 113.9z" fill-opacity="0.062" stroke-opacity="0.261" style="animation-delay: 3.06s" />
+        <path class="lit c3" d="M344.3 95.8 365.1 95.8 354.7 113.9z" fill-opacity="0.069" stroke-opacity="0.293" style="animation-delay: 3.10s" />
+        <path class="lit c2" d="M365.1 95.8 375.5 113.9 354.7 113.9z" fill-opacity="0.029" stroke-opacity="0.124" style="animation-delay: 3.16s" />
+        <path class="lit c2" d="M365.1 95.8 386 95.8 375.5 113.9z" fill-opacity="0.040" stroke-opacity="0.167" style="animation-delay: 3.19s" />
+        <path class="lit c1" d="M386 95.8 406.8 95.8 396.4 113.9z" fill-opacity="0.016" stroke-opacity="0.066" style="animation-delay: 3.30s" />
+        <path class="lit c1" d="M448.5 95.8 469.3 95.8 458.9 113.9z" fill-opacity="0.015" stroke-opacity="0.064" style="animation-delay: 3.55s" />
+        <path class="lit c2" d="M469.3 95.8 490.1 95.8 479.7 113.9z" fill-opacity="0.034" stroke-opacity="0.145" style="animation-delay: 3.60s" />
+        <path class="lit c2" d="M490.1 95.8 500.5 113.9 479.7 113.9z" fill-opacity="0.022" stroke-opacity="0.091" style="animation-delay: 3.66s" />
+        <path class="lit c3" d="M490.1 95.8 511 95.8 500.5 113.9z" fill-opacity="0.060" stroke-opacity="0.253" style="animation-delay: 3.65s" />
+        <path class="lit c3" d="M511 95.8 521.4 113.9 500.5 113.9z" fill-opacity="0.051" stroke-opacity="0.214" style="animation-delay: 3.70s" />
+        <path class="lit c3" d="M511 95.8 531.8 95.8 521.4 113.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.71s" />
+        <path class="lit c3" d="M531.8 95.8 542.2 113.9 521.4 113.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.75s" />
+        <path class="lit c3" d="M531.8 95.8 552.6 95.8 542.2 113.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.77s" />
+        <path class="lit c3" d="M552.6 95.8 563 113.9 542.2 113.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.82s" />
+        <path class="lit c3" d="M552.6 95.8 573.5 95.8 563 113.9z" fill-opacity="0.062" stroke-opacity="0.262" style="animation-delay: 3.85s" />
+        <path class="lit c3" d="M573.5 95.8 583.9 113.9 563 113.9z" fill-opacity="0.055" stroke-opacity="0.232" style="animation-delay: 3.89s" />
+        <path class="lit c1" d="M906.8 95.8 917.2 113.9 896.4 113.9z" fill-opacity="0.035" stroke-opacity="0.148" style="animation-delay: 5.33s" />
+        <path class="lit c1" d="M906.8 95.8 927.6 95.8 917.2 113.9z" fill-opacity="0.050" stroke-opacity="0.209" style="animation-delay: 5.35s" />
+        <path class="lit c2" d="M927.6 95.8 938 113.9 917.2 113.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 5.35s" />
+        <path class="lit c1" d="M927.6 95.8 948.5 95.8 938 113.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 5.37s" />
+        <path class="lit c3" d="M250.5 113.9 261 131.9 240.1 131.9z" fill-opacity="0.027" stroke-opacity="0.116" style="animation-delay: 2.68s" />
+        <path class="lit c3" d="M250.5 113.9 271.4 113.9 261 131.9z" fill-opacity="0.034" stroke-opacity="0.143" style="animation-delay: 2.73s" />
+        <path class="lit c5" d="M271.4 113.9 281.8 131.9 261 131.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.71s" />
+        <path class="lit c5" d="M271.4 113.9 292.2 113.9 281.8 131.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.76s" />
+        <path class="lit c5" d="M292.2 113.9 302.6 131.9 281.8 131.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.78s" />
+        <path class="lit c4" d="M292.2 113.9 313 113.9 302.6 131.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.85s" />
+        <path class="lit c3" d="M313 113.9 323.5 131.9 302.6 131.9z" fill-opacity="0.047" stroke-opacity="0.198" style="animation-delay: 2.90s" />
+        <path class="lit c3" d="M313 113.9 333.9 113.9 323.5 131.9z" fill-opacity="0.049" stroke-opacity="0.208" style="animation-delay: 2.97s" />
+        <path class="lit c1" d="M333.9 113.9 354.7 113.9 344.3 131.9z" fill-opacity="0.014" stroke-opacity="0.058" style="animation-delay: 3.10s" />
+        <path class="lit c3" d="M521.4 113.9 542.2 113.9 531.8 131.9z" fill-opacity="0.041" stroke-opacity="0.173" style="animation-delay: 3.80s" />
+        <path class="lit c3" d="M542.2 113.9 552.6 131.9 531.8 131.9z" fill-opacity="0.044" stroke-opacity="0.185" style="animation-delay: 3.85s" />
+        <path class="lit c3" d="M542.2 113.9 563 113.9 552.6 131.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.84s" />
+        <path class="lit c3" d="M563 113.9 573.5 131.9 552.6 131.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.88s" />
+        <path class="lit c3" d="M563 113.9 583.9 113.9 573.5 131.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.90s" />
+        <path class="lit c3" d="M583.9 113.9 594.3 131.9 573.5 131.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.94s" />
+        <path class="lit c2" d="M583.9 113.9 604.7 113.9 594.3 131.9z" fill-opacity="0.035" stroke-opacity="0.149" style="animation-delay: 3.98s" />
+        <path class="lit c2" d="M604.7 113.9 615.1 131.9 594.3 131.9z" fill-opacity="0.025" stroke-opacity="0.106" style="animation-delay: 4.04s" />
+        <path class="lit c2" d="M896.4 113.9 906.8 131.9 886 131.9z" fill-opacity="0.057" stroke-opacity="0.242" style="animation-delay: 5.25s" />
+        <path class="lit c2" d="M896.4 113.9 917.2 113.9 906.8 131.9z" fill-opacity="0.071" stroke-opacity="0.299" style="animation-delay: 5.29s" />
+        <path class="lit c2" d="M917.2 113.9 927.6 131.9 906.8 131.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 5.29s" />
+        <path class="lit c2" d="M917.2 113.9 938 113.9 927.6 131.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 5.33s" />
+        <path class="lit c1" d="M938 113.9 948.5 131.9 927.6 131.9z" fill-opacity="0.056" stroke-opacity="0.237" style="animation-delay: 5.34s" />
+        <path class="lit c1" d="M938 113.9 958.9 113.9 948.5 131.9z" fill-opacity="0.042" stroke-opacity="0.179" style="animation-delay: 5.37s" />
+        <path class="lit c4" d="M240.1 131.9 250.5 149.9 229.7 149.9z" fill-opacity="0.059" stroke-opacity="0.247" style="animation-delay: 2.57s" />
+        <path class="lit c4" d="M240.1 131.9 261 131.9 250.5 149.9z" fill-opacity="0.068" stroke-opacity="0.287" style="animation-delay: 2.61s" />
+        <path class="lit c5" d="M261 131.9 271.4 149.9 250.5 149.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.62s" />
+        <path class="lit c5" d="M261 131.9 281.8 131.9 271.4 149.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.67s" />
+        <path class="lit c5" d="M281.8 131.9 292.2 149.9 271.4 149.9z" fill-opacity="0.072" stroke-opacity="0.303" style="animation-delay: 2.70s" />
+        <path class="lit c4" d="M281.8 131.9 302.6 131.9 292.2 149.9z" fill-opacity="0.062" stroke-opacity="0.262" style="animation-delay: 2.76s" />
+        <path class="lit c1" d="M302.6 131.9 313 149.9 292.2 149.9z" fill-opacity="0.013" stroke-opacity="0.053" style="animation-delay: 2.87s" />
+        <path class="lit c3" d="M552.6 131.9 573.5 131.9 563 149.9z" fill-opacity="0.060" stroke-opacity="0.253" style="animation-delay: 3.93s" />
+        <path class="lit c3" d="M573.5 131.9 583.9 149.9 563 149.9z" fill-opacity="0.070" stroke-opacity="0.296" style="animation-delay: 3.96s" />
+        <path class="lit c3" d="M573.5 131.9 594.3 131.9 583.9 149.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 3.97s" />
+        <path class="lit c4" d="M594.3 131.9 604.7 149.9 583.9 149.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.00s" />
+        <path class="lit c3" d="M594.3 131.9 615.1 131.9 604.7 149.9z" fill-opacity="0.065" stroke-opacity="0.273" style="animation-delay: 4.03s" />
+        <path class="lit c3" d="M615.1 131.9 625.5 149.9 604.7 149.9z" fill-opacity="0.057" stroke-opacity="0.241" style="animation-delay: 4.08s" />
+        <path class="lit c2" d="M865.1 131.9 875.5 149.9 854.7 149.9z" fill-opacity="0.041" stroke-opacity="0.174" style="animation-delay: 5.13s" />
+        <path class="lit c3" d="M865.1 131.9 886 131.9 875.5 149.9z" fill-opacity="0.044" stroke-opacity="0.187" style="animation-delay: 5.17s" />
+        <path class="lit c3" d="M886 131.9 896.4 149.9 875.5 149.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 5.17s" />
+        <path class="lit c3" d="M886 131.9 906.8 131.9 896.4 149.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 5.21s" />
+        <path class="lit c3" d="M906.8 131.9 917.2 149.9 896.4 149.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 5.22s" />
+        <path class="lit c2" d="M906.8 131.9 927.6 131.9 917.2 149.9z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 5.27s" />
+        <path class="lit c1" d="M927.6 131.9 938 149.9 917.2 149.9z" fill-opacity="0.035" stroke-opacity="0.148" style="animation-delay: 5.30s" />
+        <path class="lit c1" d="M927.6 131.9 948.5 131.9 938 149.9z" fill-opacity="0.021" stroke-opacity="0.087" style="animation-delay: 5.35s" />
+        <path class="lit c2" d="M208.9 149.9 219.3 168 198.5 168z" fill-opacity="0.039" stroke-opacity="0.163" style="animation-delay: 2.45s" />
+        <path class="lit c3" d="M208.9 149.9 229.7 149.9 219.3 168z" fill-opacity="0.042" stroke-opacity="0.178" style="animation-delay: 2.49s" />
+        <path class="lit c4" d="M229.7 149.9 240.1 168 219.3 168z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.49s" />
+        <path class="lit c4" d="M229.7 149.9 250.5 149.9 240.1 168z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.53s" />
+        <path class="lit c4" d="M250.5 149.9 261 168 240.1 168z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.55s" />
+        <path class="lit c5" d="M250.5 149.9 271.4 149.9 261 168z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.59s" />
+        <path class="lit c3" d="M271.4 149.9 281.8 168 261 168z" fill-opacity="0.038" stroke-opacity="0.159" style="animation-delay: 2.64s" />
+        <path class="lit c3" d="M271.4 149.9 292.2 149.9 281.8 168z" fill-opacity="0.031" stroke-opacity="0.129" style="animation-delay: 2.70s" />
+        <path class="lit c2" d="M563 149.9 583.9 149.9 573.5 168z" fill-opacity="0.031" stroke-opacity="0.132" style="animation-delay: 4.02s" />
+        <path class="lit c2" d="M583.9 149.9 594.3 168 573.5 168z" fill-opacity="0.041" stroke-opacity="0.173" style="animation-delay: 4.05s" />
+        <path class="lit c3" d="M583.9 149.9 604.7 149.9 594.3 168z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.04s" />
+        <path class="lit c3" d="M604.7 149.9 615.1 168 594.3 168z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.08s" />
+        <path class="lit c3" d="M604.7 149.9 625.5 149.9 615.1 168z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.09s" />
+        <path class="lit c3" d="M625.5 149.9 636 168 615.1 168z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.13s" />
+        <path class="lit c3" d="M625.5 149.9 646.4 149.9 636 168z" fill-opacity="0.047" stroke-opacity="0.198" style="animation-delay: 4.17s" />
+        <path class="lit c2" d="M646.4 149.9 656.8 168 636 168z" fill-opacity="0.041" stroke-opacity="0.172" style="animation-delay: 4.22s" />
+        <path class="lit c2" d="M833.9 149.9 844.3 168 823.5 168z" fill-opacity="0.026" stroke-opacity="0.110" style="animation-delay: 5.03s" />
+        <path class="lit c2" d="M833.9 149.9 854.7 149.9 844.3 168z" fill-opacity="0.031" stroke-opacity="0.132" style="animation-delay: 5.06s" />
+        <path class="lit c3" d="M854.7 149.9 865.1 168 844.3 168z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 5.05s" />
+        <path class="lit c3" d="M854.7 149.9 875.5 149.9 865.1 168z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 5.09s" />
+        <path class="lit c3" d="M875.5 149.9 886 168 865.1 168z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 5.10s" />
+        <path class="lit c3" d="M875.5 149.9 896.4 149.9 886 168z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 5.14s" />
+        <path class="lit c3" d="M896.4 149.9 906.8 168 886 168z" fill-opacity="0.063" stroke-opacity="0.266" style="animation-delay: 5.17s" />
+        <path class="lit c2" d="M896.4 149.9 917.2 149.9 906.8 168z" fill-opacity="0.058" stroke-opacity="0.247" style="animation-delay: 5.22s" />
+        <path class="lit c1" d="M156.8 168 167.2 186 146.4 186z" fill-opacity="0.014" stroke-opacity="0.060" style="animation-delay: 2.29s" />
+        <path class="lit c3" d="M177.6 168 188 186 167.2 186z" fill-opacity="0.048" stroke-opacity="0.205" style="animation-delay: 2.31s" />
+        <path class="lit c2" d="M177.6 168 198.5 168 188 186z" fill-opacity="0.043" stroke-opacity="0.182" style="animation-delay: 2.36s" />
+        <path class="lit c3" d="M198.5 168 208.9 186 188 186z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.36s" />
+        <path class="lit c3" d="M198.5 168 219.3 168 208.9 186z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.40s" />
+        <path class="lit c4" d="M219.3 168 229.7 186 208.9 186z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.42s" />
+        <path class="lit c4" d="M219.3 168 240.1 168 229.7 186z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.46s" />
+        <path class="lit c3" d="M240.1 168 250.5 186 229.7 186z" fill-opacity="0.064" stroke-opacity="0.269" style="animation-delay: 2.50s" />
+        <path class="lit c3" d="M240.1 168 261 168 250.5 186z" fill-opacity="0.056" stroke-opacity="0.237" style="animation-delay: 2.54s" />
+        <path class="lit c3" d="M594.3 168 615.1 168 604.7 186z" fill-opacity="0.054" stroke-opacity="0.227" style="animation-delay: 4.12s" />
+        <path class="lit c3" d="M615.1 168 625.5 186 604.7 186z" fill-opacity="0.059" stroke-opacity="0.249" style="animation-delay: 4.15s" />
+        <path class="lit c3" d="M615.1 168 636 168 625.5 186z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.15s" />
+        <path class="lit c3" d="M636 168 646.4 186 625.5 186z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.20s" />
+        <path class="lit c3" d="M636 168 656.8 168 646.4 186z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.22s" />
+        <path class="lit c3" d="M656.8 168 667.2 186 646.4 186z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.26s" />
+        <path class="lit c2" d="M656.8 168 677.6 168 667.2 186z" fill-opacity="0.029" stroke-opacity="0.124" style="animation-delay: 4.31s" />
+        <path class="lit c2" d="M677.6 168 688 186 667.2 186z" fill-opacity="0.026" stroke-opacity="0.111" style="animation-delay: 4.36s" />
+        <path class="lit c2" d="M802.6 168 813 186 792.2 186z" fill-opacity="0.022" stroke-opacity="0.091" style="animation-delay: 4.89s" />
+        <path class="lit c1" d="M802.6 168 823.5 168 813 186z" fill-opacity="0.020" stroke-opacity="0.084" style="animation-delay: 4.94s" />
+        <path class="lit c3" d="M823.5 168 833.9 186 813 186z" fill-opacity="0.066" stroke-opacity="0.277" style="animation-delay: 4.92s" />
+        <path class="lit c3" d="M823.5 168 844.3 168 833.9 186z" fill-opacity="0.069" stroke-opacity="0.290" style="animation-delay: 4.97s" />
+        <path class="lit c3" d="M844.3 168 854.7 186 833.9 186z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.97s" />
+        <path class="lit c3" d="M844.3 168 865.1 168 854.7 186z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 5.02s" />
+        <path class="lit c3" d="M865.1 168 875.5 186 854.7 186z" fill-opacity="0.075" stroke-opacity="0.315" style="animation-delay: 5.04s" />
+        <path class="lit c3" d="M865.1 168 886 168 875.5 186z" fill-opacity="0.069" stroke-opacity="0.293" style="animation-delay: 5.08s" />
+        <path class="lit c2" d="M886 168 896.4 186 875.5 186z" fill-opacity="0.022" stroke-opacity="0.094" style="animation-delay: 5.14s" />
+        <path class="lit c1" d="M886 168 906.8 168 896.4 186z" fill-opacity="0.019" stroke-opacity="0.080" style="animation-delay: 5.19s" />
+        <path class="lit c1" d="M104.7 186 115.1 204.1 94.3 204.1z" fill-opacity="0.015" stroke-opacity="0.063" style="animation-delay: 2.09s" />
+        <path class="lit c2" d="M125.5 186 136 204.1 115.1 204.1z" fill-opacity="0.042" stroke-opacity="0.178" style="animation-delay: 2.12s" />
+        <path class="lit c2" d="M125.5 186 146.4 186 136 204.1z" fill-opacity="0.032" stroke-opacity="0.135" style="animation-delay: 2.17s" />
+        <path class="lit c3" d="M146.4 186 156.8 204.1 136 204.1z" fill-opacity="0.072" stroke-opacity="0.302" style="animation-delay: 2.17s" />
+        <path class="lit c3" d="M146.4 186 167.2 186 156.8 204.1z" fill-opacity="0.063" stroke-opacity="0.265" style="animation-delay: 2.22s" />
+        <path class="lit c3" d="M167.2 186 177.6 204.1 156.8 204.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.23s" />
+        <path class="lit c3" d="M167.2 186 188 186 177.6 204.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.28s" />
+        <path class="lit c3" d="M188 186 198.5 204.1 177.6 204.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.30s" />
+        <path class="lit c3" d="M188 186 208.9 186 198.5 204.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.34s" />
+        <path class="lit c3" d="M208.9 186 219.3 204.1 198.5 204.1z" fill-opacity="0.067" stroke-opacity="0.284" style="animation-delay: 2.38s" />
+        <path class="lit c3" d="M208.9 186 229.7 186 219.3 204.1z" fill-opacity="0.070" stroke-opacity="0.294" style="animation-delay: 2.41s" />
+        <path class="lit c2" d="M229.7 186 240.1 204.1 219.3 204.1z" fill-opacity="0.024" stroke-opacity="0.103" style="animation-delay: 2.47s" />
+        <path class="lit c1" d="M229.7 186 250.5 186 240.1 204.1z" fill-opacity="0.022" stroke-opacity="0.091" style="animation-delay: 2.51s" />
+        <path class="lit c1" d="M604.7 186 625.5 186 615.1 204.1z" fill-opacity="0.017" stroke-opacity="0.073" style="animation-delay: 4.22s" />
+        <path class="lit c2" d="M625.5 186 636 204.1 615.1 204.1z" fill-opacity="0.024" stroke-opacity="0.099" style="animation-delay: 4.25s" />
+        <path class="lit c3" d="M625.5 186 646.4 186 636 204.1z" fill-opacity="0.071" stroke-opacity="0.301" style="animation-delay: 4.23s" />
+        <path class="lit c3" d="M646.4 186 656.8 204.1 636 204.1z" fill-opacity="0.077" stroke-opacity="0.324" style="animation-delay: 4.27s" />
+        <path class="lit c3" d="M646.4 186 667.2 186 656.8 204.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.28s" />
+        <path class="lit c3" d="M667.2 186 677.6 204.1 656.8 204.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.32s" />
+        <path class="lit c3" d="M667.2 186 688 186 677.6 204.1z" fill-opacity="0.071" stroke-opacity="0.299" style="animation-delay: 4.35s" />
+        <path class="lit c3" d="M688 186 698.5 204.1 677.6 204.1z" fill-opacity="0.073" stroke-opacity="0.310" style="animation-delay: 4.39s" />
+        <path class="lit c2" d="M688 186 708.9 186 698.5 204.1z" fill-opacity="0.032" stroke-opacity="0.137" style="animation-delay: 4.45s" />
+        <path class="lit c3" d="M708.9 186 719.3 204.1 698.5 204.1z" fill-opacity="0.046" stroke-opacity="0.194" style="animation-delay: 4.48s" />
+        <path class="lit c1" d="M708.9 186 729.7 186 719.3 204.1z" fill-opacity="0.014" stroke-opacity="0.058" style="animation-delay: 4.57s" />
+        <path class="lit c2" d="M729.7 186 740.1 204.1 719.3 204.1z" fill-opacity="0.037" stroke-opacity="0.155" style="animation-delay: 4.58s" />
+        <path class="lit c0" d="M729.7 186 750.5 186 740.1 204.1z" fill-opacity="0.011" stroke-opacity="0.048" style="animation-delay: 4.67s" />
+        <path class="lit c2" d="M750.5 186 761 204.1 740.1 204.1z" fill-opacity="0.041" stroke-opacity="0.173" style="animation-delay: 4.65s" />
+        <path class="lit c2" d="M750.5 186 771.4 186 761 204.1z" fill-opacity="0.021" stroke-opacity="0.090" style="animation-delay: 4.72s" />
+        <path class="lit c3" d="M771.4 186 781.8 204.1 761 204.1z" fill-opacity="0.055" stroke-opacity="0.234" style="animation-delay: 4.72s" />
+        <path class="lit c2" d="M771.4 186 792.2 186 781.8 204.1z" fill-opacity="0.041" stroke-opacity="0.172" style="animation-delay: 4.78s" />
+        <path class="lit c3" d="M792.2 186 802.6 204.1 781.8 204.1z" fill-opacity="0.078" stroke-opacity="0.331" style="animation-delay: 4.78s" />
+        <path class="lit c3" d="M792.2 186 813 186 802.6 204.1z" fill-opacity="0.069" stroke-opacity="0.291" style="animation-delay: 4.83s" />
+        <path class="lit c3" d="M813 186 823.5 204.1 802.6 204.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.85s" />
+        <path class="lit c3" d="M813 186 833.9 186 823.5 204.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.89s" />
+        <path class="lit c3" d="M833.9 186 844.3 204.1 823.5 204.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.92s" />
+        <path class="lit c3" d="M833.9 186 854.7 186 844.3 204.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.96s" />
+        <path class="lit c2" d="M854.7 186 865.1 204.1 844.3 204.1z" fill-opacity="0.038" stroke-opacity="0.159" style="animation-delay: 5.00s" />
+        <path class="lit c2" d="M854.7 186 875.5 186 865.1 204.1z" fill-opacity="0.033" stroke-opacity="0.137" style="animation-delay: 5.05s" />
+        <path class="lit c1" d="M11 204.1 21.4 222.1 0.5 222.1z" fill-opacity="0.019" stroke-opacity="0.082" style="animation-delay: 1.73s" />
+        <path class="lit c2" d="M31.8 204.1 42.2 222.1 21.4 222.1z" fill-opacity="0.030" stroke-opacity="0.126" style="animation-delay: 1.79s" />
+        <path class="lit c2" d="M52.6 204.1 63 222.1 42.2 222.1z" fill-opacity="0.041" stroke-opacity="0.172" style="animation-delay: 1.85s" />
+        <path class="lit c2" d="M52.6 204.1 73.5 204.1 63 222.1z" fill-opacity="0.022" stroke-opacity="0.091" style="animation-delay: 1.91s" />
+        <path class="lit c3" d="M73.5 204.1 83.9 222.1 63 222.1z" fill-opacity="0.055" stroke-opacity="0.233" style="animation-delay: 1.91s" />
+        <path class="lit c2" d="M73.5 204.1 94.3 204.1 83.9 222.1z" fill-opacity="0.040" stroke-opacity="0.168" style="animation-delay: 1.97s" />
+        <path class="lit c3" d="M94.3 204.1 104.7 222.1 83.9 222.1z" fill-opacity="0.077" stroke-opacity="0.325" style="animation-delay: 1.98s" />
+        <path class="lit c3" d="M94.3 204.1 115.1 204.1 104.7 222.1z" fill-opacity="0.065" stroke-opacity="0.273" style="animation-delay: 2.02s" />
+        <path class="lit c3" d="M115.1 204.1 125.5 222.1 104.7 222.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.04s" />
+        <path class="lit c3" d="M115.1 204.1 136 204.1 125.5 222.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.08s" />
+        <path class="lit c3" d="M136 204.1 146.4 222.1 125.5 222.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.11s" />
+        <path class="lit c3" d="M136 204.1 156.8 204.1 146.4 222.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.15s" />
+        <path class="lit c3" d="M156.8 204.1 167.2 222.1 146.4 222.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.18s" />
+        <path class="lit c3" d="M156.8 204.1 177.6 204.1 167.2 222.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.22s" />
+        <path class="lit c3" d="M177.6 204.1 188 222.1 167.2 222.1z" fill-opacity="0.051" stroke-opacity="0.214" style="animation-delay: 2.26s" />
+        <path class="lit c3" d="M177.6 204.1 198.5 204.1 188 222.1z" fill-opacity="0.057" stroke-opacity="0.242" style="animation-delay: 2.30s" />
+        <path class="lit c1" d="M198.5 204.1 208.9 222.1 188 222.1z" fill-opacity="0.016" stroke-opacity="0.066" style="animation-delay: 2.37s" />
+        <path class="lit c1" d="M198.5 204.1 219.3 204.1 208.9 222.1z" fill-opacity="0.021" stroke-opacity="0.087" style="animation-delay: 2.40s" />
+        <path class="lit c2" d="M636 204.1 656.8 204.1 646.4 222.1z" fill-opacity="0.034" stroke-opacity="0.144" style="animation-delay: 4.32s" />
+        <path class="lit c2" d="M656.8 204.1 667.2 222.1 646.4 222.1z" fill-opacity="0.037" stroke-opacity="0.155" style="animation-delay: 4.35s" />
+        <path class="lit c3" d="M656.8 204.1 677.6 204.1 667.2 222.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.35s" />
+        <path class="lit c3" d="M677.6 204.1 688 222.1 667.2 222.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.39s" />
+        <path class="lit c3" d="M677.6 204.1 698.5 204.1 688 222.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.40s" />
+        <path class="lit c3" d="M698.5 204.1 708.9 222.1 688 222.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.45s" />
+        <path class="lit c3" d="M698.5 204.1 719.3 204.1 708.9 222.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.47s" />
+        <path class="lit c4" d="M719.3 204.1 729.7 222.1 708.9 222.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.51s" />
+        <path class="lit c3" d="M719.3 204.1 740.1 204.1 729.7 222.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.55s" />
+        <path class="lit c3" d="M740.1 204.1 750.5 222.1 729.7 222.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.59s" />
+        <path class="lit c3" d="M740.1 204.1 761 204.1 750.5 222.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.62s" />
+        <path class="lit c3" d="M761 204.1 771.4 222.1 750.5 222.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.66s" />
+        <path class="lit c4" d="M761 204.1 781.8 204.1 771.4 222.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.70s" />
+        <path class="lit c3" d="M781.8 204.1 792.2 222.1 771.4 222.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.73s" />
+        <path class="lit c3" d="M781.8 204.1 802.6 204.1 792.2 222.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.77s" />
+        <path class="lit c3" d="M802.6 204.1 813 222.1 792.2 222.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.80s" />
+        <path class="lit c3" d="M802.6 204.1 823.5 204.1 813 222.1z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 4.84s" />
+        <path class="lit c2" d="M823.5 204.1 833.9 222.1 813 222.1z" fill-opacity="0.042" stroke-opacity="0.176" style="animation-delay: 4.88s" />
+        <path class="lit c2" d="M823.5 204.1 844.3 204.1 833.9 222.1z" fill-opacity="0.043" stroke-opacity="0.182" style="animation-delay: 4.92s" />
+        <path class="lit c1" d="M-41.1 222.1 -30.7 240.2 -51.5 240.2z" fill-opacity="0.056" stroke-opacity="0.238" style="animation-delay: 1.62s" />
+        <path class="lit c1" d="M-41.1 222.1 -20.3 222.1 -30.7 240.2z" fill-opacity="0.042" stroke-opacity="0.177" style="animation-delay: 1.63s" />
+        <path class="lit c2" d="M-20.3 222.1 -9.9 240.2 -30.7 240.2z" fill-opacity="0.076" stroke-opacity="0.323" style="animation-delay: 1.64s" />
+        <path class="lit c2" d="M-20.3 222.1 0.5 222.1 -9.9 240.2z" fill-opacity="0.058" stroke-opacity="0.247" style="animation-delay: 1.65s" />
+        <path class="lit c3" d="M0.5 222.1 11 240.2 -9.9 240.2z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 1.66s" />
+        <path class="lit c3" d="M0.5 222.1 21.4 222.1 11 240.2z" fill-opacity="0.071" stroke-opacity="0.299" style="animation-delay: 1.69s" />
+        <path class="lit c3" d="M21.4 222.1 31.8 240.2 11 240.2z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 1.71s" />
+        <path class="lit c3" d="M21.4 222.1 42.2 222.1 31.8 240.2z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 1.75s" />
+        <path class="lit c3" d="M42.2 222.1 52.6 240.2 31.8 240.2z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 1.78s" />
+        <path class="lit c3" d="M42.2 222.1 63 222.1 52.6 240.2z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 1.82s" />
+        <path class="lit c3" d="M63 222.1 73.5 240.2 52.6 240.2z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 1.85s" />
+        <path class="lit c3" d="M63 222.1 83.9 222.1 73.5 240.2z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 1.89s" />
+        <path class="lit c3" d="M83.9 222.1 94.3 240.2 73.5 240.2z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 1.92s" />
+        <path class="lit c4" d="M83.9 222.1 104.7 222.1 94.3 240.2z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 1.96s" />
+        <path class="lit c3" d="M104.7 222.1 115.1 240.2 94.3 240.2z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.00s" />
+        <path class="lit c3" d="M104.7 222.1 125.5 222.1 115.1 240.2z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 2.03s" />
+        <path class="lit c3" d="M125.5 222.1 136 240.2 115.1 240.2z" fill-opacity="0.053" stroke-opacity="0.222" style="animation-delay: 2.08s" />
+        <path class="lit c3" d="M125.5 222.1 146.4 222.1 136 240.2z" fill-opacity="0.063" stroke-opacity="0.268" style="animation-delay: 2.11s" />
+        <path class="lit c2" d="M146.4 222.1 156.8 240.2 136 240.2z" fill-opacity="0.024" stroke-opacity="0.103" style="animation-delay: 2.17s" />
+        <path class="lit c2" d="M146.4 222.1 167.2 222.1 156.8 240.2z" fill-opacity="0.034" stroke-opacity="0.144" style="animation-delay: 2.20s" />
+        <path class="lit c2" d="M667.2 222.1 688 222.1 677.6 240.2z" fill-opacity="0.032" stroke-opacity="0.137" style="animation-delay: 4.43s" />
+        <path class="lit c1" d="M688 222.1 698.5 240.2 677.6 240.2z" fill-opacity="0.024" stroke-opacity="0.100" style="animation-delay: 4.48s" />
+        <path class="lit c3" d="M688 222.1 708.9 222.1 698.5 240.2z" fill-opacity="0.061" stroke-opacity="0.256" style="animation-delay: 4.47s" />
+        <path class="lit c2" d="M708.9 222.1 719.3 240.2 698.5 240.2z" fill-opacity="0.043" stroke-opacity="0.183" style="animation-delay: 4.52s" />
+        <path class="lit c3" d="M708.9 222.1 729.7 222.1 719.3 240.2z" fill-opacity="0.074" stroke-opacity="0.313" style="animation-delay: 4.53s" />
+        <path class="lit c3" d="M729.7 222.1 740.1 240.2 719.3 240.2z" fill-opacity="0.050" stroke-opacity="0.213" style="animation-delay: 4.58s" />
+        <path class="lit c3" d="M729.7 222.1 750.5 222.1 740.1 240.2z" fill-opacity="0.076" stroke-opacity="0.320" style="animation-delay: 4.60s" />
+        <path class="lit c2" d="M750.5 222.1 761 240.2 740.1 240.2z" fill-opacity="0.047" stroke-opacity="0.198" style="animation-delay: 4.64s" />
+        <path class="lit c3" d="M750.5 222.1 771.4 222.1 761 240.2z" fill-opacity="0.068" stroke-opacity="0.285" style="animation-delay: 4.67s" />
+        <path class="lit c2" d="M771.4 222.1 781.8 240.2 761 240.2z" fill-opacity="0.035" stroke-opacity="0.146" style="animation-delay: 4.72s" />
+        <path class="lit c3" d="M771.4 222.1 792.2 222.1 781.8 240.2z" fill-opacity="0.051" stroke-opacity="0.215" style="animation-delay: 4.74s" />
+        <path class="lit c1" d="M792.2 222.1 802.6 240.2 781.8 240.2z" fill-opacity="0.015" stroke-opacity="0.063" style="animation-delay: 4.81s" />
+        <path class="lit c2" d="M792.2 222.1 813 222.1 802.6 240.2z" fill-opacity="0.027" stroke-opacity="0.114" style="animation-delay: 4.83s" />
+        <path class="lit c2" d="M-30.7 240.2 -20.3 258.2 -41.1 258.2z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 1.62s" />
+        <path class="lit c2" d="M-30.7 240.2 -9.9 240.2 -20.3 258.2z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 1.63s" />
+        <path class="lit c2" d="M-9.9 240.2 0.5 258.2 -20.3 258.2z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 1.65s" />
+        <path class="lit c3" d="M-9.9 240.2 11 240.2 0.5 258.2z" fill-opacity="0.090" stroke-opacity="0.380" style="animation-delay: 1.66s" />
+        <path class="lit c3" d="M11 240.2 21.4 258.2 0.5 258.2z" fill-opacity="0.069" stroke-opacity="0.291" style="animation-delay: 1.68s" />
+        <path class="lit c3" d="M11 240.2 31.8 240.2 21.4 258.2z" fill-opacity="0.089" stroke-opacity="0.377" style="animation-delay: 1.71s" />
+        <path class="lit c3" d="M31.8 240.2 42.2 258.2 21.4 258.2z" fill-opacity="0.058" stroke-opacity="0.246" style="animation-delay: 1.75s" />
+        <path class="lit c3" d="M31.8 240.2 52.6 240.2 42.2 258.2z" fill-opacity="0.079" stroke-opacity="0.333" style="animation-delay: 1.78s" />
+        <path class="lit c3" d="M52.6 240.2 63 258.2 42.2 258.2z" fill-opacity="0.048" stroke-opacity="0.201" style="animation-delay: 1.83s" />
+        <path class="lit c3" d="M52.6 240.2 73.5 240.2 63 258.2z" fill-opacity="0.067" stroke-opacity="0.284" style="animation-delay: 1.86s" />
+        <path class="lit c2" d="M73.5 240.2 83.9 258.2 63 258.2z" fill-opacity="0.035" stroke-opacity="0.146" style="animation-delay: 1.91s" />
+        <path class="lit c3" d="M73.5 240.2 94.3 240.2 83.9 258.2z" fill-opacity="0.051" stroke-opacity="0.217" style="animation-delay: 1.93s" />
+        <path class="lit c1" d="M94.3 240.2 104.7 258.2 83.9 258.2z" fill-opacity="0.016" stroke-opacity="0.067" style="animation-delay: 2.00s" />
+        <path class="lit c2" d="M94.3 240.2 115.1 240.2 104.7 258.2z" fill-opacity="0.029" stroke-opacity="0.121" style="animation-delay: 2.02s" />
+        <path class="lit c1" d="M-41.1 258.2 -30.7 276.2 -51.5 276.2z" fill-opacity="0.037" stroke-opacity="0.157" style="animation-delay: 1.61s" />
+        <path class="lit c1" d="M-41.1 258.2 -20.3 258.2 -30.7 276.2z" fill-opacity="0.049" stroke-opacity="0.208" style="animation-delay: 1.62s" />
+        <path class="lit c0" d="M-20.3 258.2 -9.9 276.2 -30.7 276.2z" fill-opacity="0.014" stroke-opacity="0.058" style="animation-delay: 1.65s" />
+        <path class="lit c1" d="M-20.3 258.2 0.5 258.2 -9.9 276.2z" fill-opacity="0.031" stroke-opacity="0.130" style="animation-delay: 1.65s" />
+        <path class="lit c1" d="M0.5 258.2 21.4 258.2 11 276.2z" fill-opacity="0.017" stroke-opacity="0.074" style="animation-delay: 1.72s" />
+      </g>
+    </g>
+    <g class="word" fill="#f2f2f2">
+      <g transform="translate(90.8 168) scale(0.024414 -0.024414)"><use href="#g0" x="0" /><use href="#g1" x="686.04" /><use href="#g2" x="1899.08" /><use href="#g3" x="2626.12" /><use href="#g3" x="3796.16" /><use href="#g4" x="4966.2" /></g>
+      <g transform="translate(325.8 168) scale(0.024414 -0.024414)"><use href="#g5" x="0" /><use href="#g6" x="1254.04" /><use href="#g7" x="2398.08" /><use href="#g8" x="3533.12" /><use href="#g9" x="4745.16" /><use href="#g3" x="5897.2" /><use href="#g5" x="7067.24" /><use href="#g4" x="8304.279999999999" /><use href="#g0" x="9216.32" /><use href="#g3" x="9878.36" /><use href="#g9" x="11048.400000000001" /><use href="#g1" x="12200.440000000002" /><use href="#g8" x="13413.480000000003" /><use href="#g10" x="14625.520000000004" /><use href="#g11" x="15120.560000000005" /><use href="#g12" x="16357.600000000006" /><use href="#g3" x="17570.640000000007" /><use href="#g13" x="18740.680000000008" /></g>
+    </g>
+    <g>
+      <path class="tile" d="M281.8 95.8 292.2 113.9 271.4 113.9z" style="animation-delay: 0.300s" />
+      <path class="tile" d="M271.4 113.9 281.8 131.9 261 131.9z" style="animation-delay: 0.355s" />
+      <path class="tile" d="M292.2 113.9 302.6 131.9 281.8 131.9z" style="animation-delay: 0.410s" />
+      <path class="tile" d="M261 131.9 271.4 149.9 250.5 149.9z" style="animation-delay: 0.465s" />
+      <path class="tile" d="M261 131.9 281.8 131.9 271.4 149.9z" style="animation-delay: 0.520s" />
+      <path class="tile" d="M281.8 131.9 292.2 149.9 271.4 149.9z" style="animation-delay: 0.575s" />
+      <path class="tile" d="M281.8 131.9 302.6 131.9 292.2 149.9z" style="animation-delay: 0.630s" />
+      <path class="tile" d="M302.6 131.9 313 149.9 292.2 149.9z" style="animation-delay: 0.685s" />
+      <path class="tile" d="M250.5 149.9 261 168 240.1 168z" style="animation-delay: 0.740s" />
+      <path class="tile" d="M250.5 149.9 271.4 149.9 261 168z" style="animation-delay: 0.795s" />
+      <path class="tile" d="M292.2 149.9 313 149.9 302.6 168z" style="animation-delay: 0.850s" />
+      <path class="tile" d="M313 149.9 323.5 168 302.6 168z" style="animation-delay: 0.905s" />
+      <path class="flash t3" d="M281.8 95.8 292.2 113.9 271.4 113.9z" fill-opacity="0.60" style="animation-delay: 2.86s" />
+      <path class="flash t4" d="M271.4 113.9 281.8 131.9 261 131.9z" fill-opacity="1.00" style="animation-delay: 2.73s" />
+      <path class="flash t4" d="M292.2 113.9 302.6 131.9 281.8 131.9z" fill-opacity="1.00" style="animation-delay: 2.80s" />
+      <path class="flash t4" d="M261 131.9 271.4 149.9 250.5 149.9z" fill-opacity="1.00" style="animation-delay: 2.63s" />
+      <path class="flash t4" d="M261 131.9 281.8 131.9 271.4 149.9z" fill-opacity="1.00" style="animation-delay: 2.68s" />
+      <path class="flash t4" d="M281.8 131.9 292.2 149.9 271.4 149.9z" fill-opacity="0.80" style="animation-delay: 2.72s" />
+      <path class="flash t3" d="M281.8 131.9 302.6 131.9 292.2 149.9z" fill-opacity="0.69" style="animation-delay: 2.79s" />
+      <path class="flash t4" d="M250.5 149.9 261 168 240.1 168z" fill-opacity="1.00" style="animation-delay: 2.56s" />
+      <path class="flash t4" d="M250.5 149.9 271.4 149.9 261 168z" fill-opacity="1.00" style="animation-delay: 2.60s" />
+    </g>
+    <g class="tag" fill="#a3a3a3">
+      <g transform="translate(96.3 222) scale(0.009277 -0.009277)"><use href="#g14" x="0" /><use href="#g15" x="1308" /><use href="#g16" x="2045" /><use href="#g17" x="3273" /><use href="#g18" x="4527" /><use href="#g19" x="5738" /><use href="#g20" x="6908" /><use href="#g21" x="7578" /><use href="#g16" x="8074" /><use href="#g22" x="9302" /><use href="#g23" x="10512" /><use href="#g15" x="11454" /><use href="#g24" x="12191" /><use href="#g25" x="13405" /><use href="#g17" x="14555" /><use href="#g26" x="15819" /><use href="#g25" x="17546" /><use href="#g17" x="18696" /><use href="#g27" x="19960" /><use href="#g25" x="21101" /><use href="#g22" x="22251" /><use href="#g19" x="23461" /><use href="#g24" x="24631" /><use href="#g17" x="25825" /><use href="#g20" x="27655" /><use href="#g24" x="28305" /><use href="#g19" x="29499" /><use href="#g28" x="30669" /><use href="#g22" x="31880" /><use href="#g21" x="33090" /><use href="#g29" x="33586" /><use href="#g18" x="34840" /><use href="#g24" x="36051" /><use href="#g30" x="37245" /><use href="#g31" x="38902" /><use href="#g16" x="39600" /><use href="#g15" x="40828" /><use href="#g20" x="42175" /><use href="#g28" x="42845" /><use href="#g15" x="44056" /><use href="#g24" x="44793" /><use href="#g24" x="45987" /><use href="#g32" x="47181" /><use href="#g33" x="47771" /><use href="#g30" x="48267" /><use href="#g34" x="49348" /><use href="#g35" x="50514" /><use href="#g25" x="52308" /><use href="#g17" x="53458" /><use href="#g24" x="54712" /><use href="#g21" x="56482" /><use href="#g22" x="56978" /><use href="#g36" x="58764" /><use href="#g37" x="60086" /><use href="#g38" x="61400" /><use href="#g34" x="62558" /><use href="#g31" x="63724" /><use href="#g16" x="64422" /><use href="#g15" x="65650" /><use href="#g39" x="66997" /><use href="#g24" x="68911" /><use href="#g40" x="70105" /><use href="#g41" x="71359" /><use href="#g14" x="72887" /><use href="#g42" x="74195" /><use href="#g32" x="75650" /></g>
+    </g>
+  </g>
+  <rect x="0.5" y="0.5" width="899" height="299" rx="11.5" stroke="#fff" stroke-opacity="0.08" />
+</svg>

@@ -19,8 +19,10 @@ Advanced three.js WebGPU techniques, written in TSL and shipped as plain ES modu
 - `simulations/<technique>/`: one folder per GPU simulation (noodles, reaction-diffusion), with a README explaining its
   techniques.
   - `simulations/<technique>/utils/`: the simulation's helpers, imported by its main module.
-- `utils/`: the repo's dev scripts (`generate-screenshots.js`, the examples' `loading.js`, the `<loading-screen>` every
-  page that downloads assets shows), not shipped, and `GPUTierDetector.js`, shipped and imported by path
+- `scripts/`: the repo's Node scripts (`generate-screenshots.js`, `generate-docs.js`), run through `npm run`, not
+  shipped.
+- `utils/`: the examples' `loading.js` (the `<loading-screen>` every page that downloads assets shows), not shipped,
+  and `GPUTierDetector.js`, shipped and imported by path
   (`three-advanced-techniques/utils/GPUTierDetector.js`). `compileQuad.js`, shipped, is the rendering techniques' shared
   helper: a helper more than one technique imports lives here, not in each technique's `utils/`.
 - Every demo page writes its import map inline, mapping only the packages its modules import.
@@ -30,6 +32,13 @@ Advanced three.js WebGPU techniques, written in TSL and shipped as plain ES modu
   - `examples/screenshots/`: the examples' screenshots for the README. A technique's demo keeps its screenshot beside
     it, named after the demo's page (`rendering/bloom/index.webp`, `simulations/noodles/worms.webp`). `npm run screenshots`
     captures them all.
+- `website/`: the examples gallery and docs site, plain ES modules with real slash paths (`examples/bloom/`,
+  `docs/BloomNode/`, members as fragments: `docs/BloomNode/#BloomNodeOptions.strength`), never hash routes, every URL
+  relative. Not shipped. `website/examples.js` lists the demos by hand: add a new demo there too. `npm run docs`
+  (`scripts/generate-docs.js`) generates `website/data/docs.json` from the main modules' `.d.ts` files and the READMEs,
+  and one page per route (`website/{examples,docs}/<id>/index.html`, copies of `website/index.html`): rerun it after
+  changing a `.d.ts`, a README, the demos, `website/index.html` or `website/quickstart.md` (the docs home's
+  quickstart), and never edit the generated files by hand.
 
 ## Conventions
 

@@ -90,30 +90,6 @@ canvas {
   white-space: pre-wrap;
 }
 
-.lab-hint {
-  position: fixed;
-  left: 50%;
-  bottom: 16px;
-  z-index: 5;
-  max-width: calc(100vw - 32px);
-  margin: 0;
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72);
-  color: #47515a;
-  font-size: 12px;
-  line-height: 1.4;
-  text-align: center;
-  transform: translateX(-50%);
-  pointer-events: none;
-  backdrop-filter: blur(6px);
-}
-@media (max-width: 600px) {
-  .lab-hint {
-    border-radius: 12px;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .loading-bar::after {
     animation: none;

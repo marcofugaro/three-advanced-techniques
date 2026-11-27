@@ -13,7 +13,7 @@
           "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.tsl.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/",
           "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.21.0/dist/lil-gui.esm.js",
-          "stats-gl": "https://cdn.jsdelivr.net/npm/stats-gl@4.2.3/dist/main.js"
+          "stats-gl": "https://cdn.jsdelivr.net/npm/stats-gl@4.2.3/+esm"
         }
       }
     </script>
@@ -61,7 +61,6 @@
 
       const lab = await Lab.create({
         title: 'Reaction diffusion',
-        hint: 'Hover over the sphere to grow the pattern · R starts over',
       })
       lab.gui.controllers.find((controller) => controller.property === 'reset')?.name('Start over (R)')
       const paint = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))

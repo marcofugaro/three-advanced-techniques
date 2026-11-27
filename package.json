@@ -40,7 +40,8 @@
       "default": "./three-advanced-techniques.js"
     },
     "./rendering/*": "./rendering/*",
-    "./simulations/*": "./simulations/*"
+    "./simulations/*": "./simulations/*",
+    "./utils/GPUTierDetector.js": "./utils/GPUTierDetector.js"
   },
   "files": [
     "three-advanced-techniques.js",
@@ -48,6 +49,7 @@
     "rendering/",
     "simulations/",
     "utils/compileQuad.js",
+    "utils/GPUTierDetector.js",
     "!**/*.html",
     "!**/*.md",
     "!**/*.webp",
@@ -58,7 +60,8 @@
   ],
   "scripts": {
     "dev": "serve --listen 5174 --no-request-logging",
-    "screenshots": "node utils/generate-screenshots.js"
+    "screenshots": "node scripts/generate-screenshots.js",
+    "docs": "node scripts/generate-docs.js"
   },
   "peerDependencies": {
     "@types/three": ">=0.187.0",
@@ -78,9 +81,12 @@
     "@gltf-transform/extensions": "^4.5.1",
     "@gltf-transform/functions": "^4.5.1",
     "@types/three": "^0.187.0",
+    "marked": "^18.3.0",
     "meshoptimizer": "^1.3.0",
     "puppeteer": "^25.10.0",
     "serve": "^14.2.8",
-    "sharp": "^0.35.5"
+    "sharp": "^0.35.5",
+    "shiki": "^4.6.0",
+    "typescript": "^6.0.3"
   }
 }

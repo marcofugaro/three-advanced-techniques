@@ -26,7 +26,7 @@ import { taau } from '../../rendering/taau/TAAUNode.js'
  * rimmed from behind, with ambient occlusion, an orbiting camera, a GUI, stats, a loading screen and pointer grabbing.
  * It holds no simulation: an example adds its own, colliding with the bench through `colliders` and `ground`.
  *
- *   const lab = await Lab.create({ title: 'Noodles', hint: 'Drag a noodle to pull it', scale: 4 })
+ *   const lab = await Lab.create({ title: 'Noodles', scale: 4 })
  *   lab.addTray()                                     // optional: walls that keep crawlers on the bench
  *   const noodles = new NoodleSimulation(dropStrands({ ... }), material, { colliders: lab.colliders })
  *   noodles.ground = lab.ground
@@ -157,7 +157,6 @@ export class Lab {
    *
    * @param {object} [options]
    * @param {string} [options.title=document.title] - The GUI's title.
-   * @param {string} [options.hint] - A line of help at the bottom of the screen.
    * @param {number} [options.scale=1] - The lab's size, × a 1.6 m bench: a bigger one holds bigger simulations.
    */
   static async create(options = {}) {
@@ -272,7 +271,7 @@ export class Lab {
 
   // ---- Setup ----
 
-  async #init({ title = document.title, hint = '' }) {
+  async #init({ title = document.title }) {
     window.addEventListener('error', (event) => Lab.fail(event.error ?? event.message))
     window.addEventListener('unhandledrejection', (event) => Lab.fail(event.reason))
 
@@ -358,13 +357,6 @@ export class Lab {
     this.gui = new GUI({ title })
     if (window.innerWidth < 600) this.gui.close()
     this.gui.add(this, 'reset').name('Drop again (R)')
-
-    if (hint) {
-      const line = document.createElement('p')
-      line.className = 'lab-hint'
-      line.textContent = hint
-      document.body.appendChild(line)
-    }
 
     this.#listen()
     this.timer.connect(document)

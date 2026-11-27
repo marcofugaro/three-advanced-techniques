@@ -1,6 +1,4 @@
-# three-advanced-techniques
-
-> Production-ready advanced techniques for [three.js](https://threejs.org), made in TSL, for WebGPU.
+<h1 align="center"><img src=".github/header.svg" width="900" alt="three-advanced-techniques"></h1>
 
 ## Usage
 
